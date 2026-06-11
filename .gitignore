@@ -1,0 +1,23 @@
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+*.xcworkspace/xcuserdata/
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+*.moved-aside
+
+# XcodeGen génère le .xcodeproj — on ne le versionne pas (source = project.yml)
+VlogMe.xcodeproj/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# macOS
+.DS_Store
+
+# CocoaPods / Carthage (non utilisés ici, par sécurité)
+Pods/
+Carthage/Build/

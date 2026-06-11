@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>VlogMe</string>
+	<key>CFBundleName</key>
+	<string>VlogMe</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+
+	<!-- Permissions (cf. §6.4) — textes clairs, lus par la review Apple. -->
+	<key>NSCameraUsageDescription</key>
+	<string>VlogMe utilise la caméra pour filmer tes vlogs.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VlogMe enregistre le son de tes vlogs.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Pour enregistrer ta vidéo finale dans ta pellicule.</string>
+
+	<!-- App principalement portrait (vertical 9:16 par défaut). -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string></string>
+	</dict>
+</dict>
+</plist>
