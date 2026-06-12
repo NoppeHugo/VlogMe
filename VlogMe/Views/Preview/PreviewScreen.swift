@@ -30,6 +30,12 @@ struct PreviewScreen: View {
                     .ignoresSafeArea(edges: .top)
                     .onAppear { player.play() }
                     .onDisappear { player.pause() }
+                    .task {
+                        guard let item = player.currentItem else { return }
+                        for await status in item.publisher(for: \.status).values {
+                            if status == .readyToPlay { player.play(); break }
+                        }
+                    }
 
             case .failed(let message):
                 VStack(spacing: 12) {
