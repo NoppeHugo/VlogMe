@@ -17,7 +17,7 @@ struct PreviewScreen: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             switch vm.state {
             case .loading:

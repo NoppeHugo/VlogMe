@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Liste des brouillons de vlogs. Accessible depuis l'écran caméra.
+/// Liste des brouillons de vlogs — thème clair (DA §1).
 struct VlogLibraryScreen: View {
 
     @EnvironmentObject private var store: VlogStore
@@ -12,19 +12,15 @@ struct VlogLibraryScreen: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
-                if store.drafts.isEmpty {
-                    emptyState
-                } else {
-                    draftList
-                }
+                Color.cardBackground.ignoresSafeArea()
+                if store.drafts.isEmpty { emptyState } else { draftList }
             }
             .navigationTitle("Mes vlogs")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Fermer") { dismiss() }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.textSecondary)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -32,20 +28,20 @@ struct VlogLibraryScreen: View {
                         dismiss()
                     } label: {
                         Image(systemName: "plus")
+                            .fontWeight(.semibold)
                     }
                     .foregroundStyle(Color.accentOrange)
                 }
             }
-            .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbarBackground(Color.cardBackground, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
         .alert("Renommer", isPresented: Binding(
             get: { draftToRename != nil },
             set: { if !$0 { draftToRename = nil } }
         )) {
-            TextField("Nom du vlog", text: $newName)
-                .autocorrectionDisabled()
+            TextField("Nom du vlog", text: $newName).autocorrectionDisabled()
             Button("Annuler", role: .cancel) { draftToRename = nil }
             Button("OK") {
                 if let d = draftToRename, !newName.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -56,7 +52,7 @@ struct VlogLibraryScreen: View {
         }
     }
 
-    // MARK: - Draft list
+    // MARK: - Liste
 
     private var draftList: some View {
         List {
@@ -65,14 +61,11 @@ struct VlogLibraryScreen: View {
                     draft: draft,
                     isActive: draft.id == store.activeId,
                     isDefault: draft.id == store.defaultId,
-                    onTargetChanged: { store.updateTargetDuration($0) }
+                    onTargetChanged: { store.updateTargetDuration($0, for: draft.id) }
                 )
-                .listRowBackground(
-                    draft.id == store.activeId
-                        ? Color.accentOrange.opacity(0.12)
-                        : Color.white.opacity(0.05)
-                )
+                .listRowBackground(Color.white)
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                .listRowSeparator(.hidden)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     store.activateDraft(draft.id)
@@ -82,9 +75,8 @@ struct VlogLibraryScreen: View {
                     Button {
                         store.activateDraft(draft.id)
                         dismiss()
-                    } label: {
-                        Label("Ouvrir", systemImage: "camera.fill")
-                    }
+                    } label: { Label("Ouvrir", systemImage: "camera.fill") }
+
                     Button {
                         store.setDefault(draft.id)
                     } label: {
@@ -93,18 +85,17 @@ struct VlogLibraryScreen: View {
                             systemImage: "star"
                         )
                     }
+
                     Button {
                         newName = draft.name
                         draftToRename = draft
-                    } label: {
-                        Label("Renommer", systemImage: "pencil")
-                    }
+                    } label: { Label("Renommer", systemImage: "pencil") }
+
                     Divider()
+
                     Button(role: .destructive) {
                         store.deleteDraft(draft.id)
-                    } label: {
-                        Label("Supprimer", systemImage: "trash")
-                    }
+                    } label: { Label("Supprimer", systemImage: "trash") }
                 }
             }
             .onDelete { indexSet in
@@ -113,30 +104,31 @@ struct VlogLibraryScreen: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .background(Color.cardBackground)
     }
 
-    // MARK: - Empty state
+    // MARK: - État vide
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Image(systemName: "rectangle.stack")
-                .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.3))
+                .font(.system(size: 52, weight: .light))
+                .foregroundStyle(Color.textSecondary)
             Text("Aucun vlog")
-                .foregroundStyle(.white.opacity(0.5))
+                .font(.headline)
+                .foregroundStyle(Color.textSecondary)
             Button {
                 store.createDraft()
                 dismiss()
             } label: {
-                Label("Nouveau vlog", systemImage: "plus")
+                Text("Nouveau vlog")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.accentOrange)
+            .buttonStyle(OrangeButton())
         }
     }
 }
 
-// MARK: - Draft row
+// MARK: - Ligne brouillon
 
 private struct DraftRow: View {
 
@@ -148,90 +140,79 @@ private struct DraftRow: View {
     @State private var showTargetPicker = false
 
     private static let targets: [(label: String, value: Double?)] = [
-        ("Aucune", nil),
-        ("30 s", 30),
-        ("1 min", 60),
-        ("1:30", 90),
-        ("2 min", 120),
-        ("3 min", 180)
+        ("Aucune", nil), ("30 s", 30), ("1 min", 60),
+        ("1:30", 90), ("2 min", 120), ("3 min", 180)
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                // Active indicator
-                RoundedRectangle(cornerRadius: 2)
+            HStack(spacing: 0) {
+                // Indicateur actif
+                Rectangle()
                     .fill(isActive ? Color.accentOrange : Color.clear)
                     .frame(width: 3)
-                    .padding(.vertical, 4)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        if isDefault {
-                            Image(systemName: "star.fill")
-                                .font(.caption2)
-                                .foregroundStyle(Color.accentOrange)
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 6) {
+                            if isDefault {
+                                Image(systemName: "star.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.accentOrange)
+                            }
+                            Text(draft.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.textPrimary)
                         }
-                        Text(draft.name)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                    }
 
-                    HStack(spacing: 8) {
-                        Text(relativeDateString(draft.createdAt))
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.5))
-
-                        Text("·")
-                            .foregroundStyle(.white.opacity(0.3))
-
-                        Text("\(draft.segments.count) clip\(draft.segments.count == 1 ? "" : "s")")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.5))
-
-                        if draft.hasSegments {
+                        HStack(spacing: 6) {
+                            Text(relativeDate(draft.createdAt))
                             Text("·")
-                                .foregroundStyle(.white.opacity(0.3))
-                            Text(formatDuration(draft.totalDuration))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.5))
+                            Text("\(draft.segments.count) clip\(draft.segments.count == 1 ? "" : "s")")
+                            if draft.hasSegments {
+                                Text("·")
+                                Text(formatDuration(draft.totalDuration))
+                                    .monospacedDigit()
+                            }
                         }
+                        .font(.caption)
+                        .foregroundStyle(Color.textSecondary)
                     }
-                }
 
-                Spacer()
+                    Spacer()
 
-                // Target duration button
-                Button {
-                    showTargetPicker = true
-                } label: {
-                    Group {
-                        if let t = draft.targetDuration {
-                            Text("/ \(formatDuration(t))")
-                                .font(.caption.monospacedDigit().weight(.medium))
-                                .foregroundStyle(Color.accentOrange)
-                        } else {
-                            Image(systemName: "scope")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.35))
+                    // Durée cible
+                    Button { showTargetPicker = true } label: {
+                        Group {
+                            if let t = draft.targetDuration {
+                                Text("/ \(formatDuration(t))")
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(Color.accentOrange)
+                            } else {
+                                Image(systemName: "scope")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.textSecondary)
+                            }
                         }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.borderColor, in: Capsule())
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.08), in: Capsule())
-                }
-                .confirmationDialog("Durée cible", isPresented: $showTargetPicker) {
-                    ForEach(DraftRow.targets, id: \.label) { option in
-                        Button(option.label) { onTargetChanged(option.value) }
+                    .confirmationDialog("Durée cible", isPresented: $showTargetPicker) {
+                        ForEach(DraftRow.targets, id: \.label) { opt in
+                            Button(opt.label) { onTargetChanged(opt.value) }
+                        }
+                        Button("Annuler", role: .cancel) {}
                     }
-                    Button("Annuler", role: .cancel) {}
+                    .padding(.trailing, 16)
                 }
-                .padding(.trailing, 16)
+                .padding(.vertical, 14)
+                .padding(.leading, 12)
             }
-            .padding(.vertical, 12)
-            .padding(.leading, 4)
 
-            Divider().background(.white.opacity(0.08)).padding(.leading, 19)
+            Divider()
+                .background(Color.borderColor)
+                .padding(.leading, 15)
         }
     }
 
@@ -240,7 +221,7 @@ private struct DraftRow: View {
         return t < 60 ? "\(t) s" : String(format: "%d:%02d", t / 60, t % 60)
     }
 
-    private func relativeDateString(_ date: Date) -> String {
+    private func relativeDate(_ date: Date) -> String {
         let cal = Calendar.current
         if cal.isDateInToday(date) { return "Aujourd'hui" }
         if cal.isDateInYesterday(date) { return "Hier" }

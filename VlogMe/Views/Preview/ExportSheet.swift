@@ -12,7 +12,7 @@ struct ExportSheet: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
             VStack(spacing: 28) { content }.padding(32)
         }
         .sheet(isPresented: $vm.showShareSheet) {

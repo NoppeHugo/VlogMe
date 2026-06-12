@@ -78,7 +78,8 @@ private struct SegmentThumbnailView: View {
                 .background(.black.opacity(0.6))
         }
         .frame(width: 54, height: 80)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.35), radius: 4, x: 0, y: 2)
         .overlay(alignment: .topLeading) {
             Text("\(index)")
                 .font(.system(size: 9, weight: .bold))
@@ -88,7 +89,7 @@ private struct SegmentThumbnailView: View {
                 .padding(3)
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 12)
                 .stroke(isLast ? Color.accentOrange : Color.white.opacity(0.25), lineWidth: isLast ? 2 : 1)
         )
         .task(id: url) {

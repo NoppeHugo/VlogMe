@@ -62,7 +62,7 @@ struct VideoAssembler {
             )
 
             // Sous-plages à insérer (tout le segment, ou uniquement le non-silencieux)
-            let isOutro = (url == outroURL)
+            let isOutro = outroURL.map { $0 == url } ?? false
             let rangesToInsert: [CMTimeRange]
             if cutSilence && !isOutro {
                 let nonSilent = await SilenceDetector.nonSilentRanges(in: url)

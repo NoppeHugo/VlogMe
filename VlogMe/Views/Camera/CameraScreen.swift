@@ -13,7 +13,7 @@ struct CameraScreen: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             CameraPreviewLayerView(
                 session: vm.camera.session,

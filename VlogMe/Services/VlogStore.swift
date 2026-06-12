@@ -167,11 +167,13 @@ final class VlogStore: ObservableObject {
         save()
     }
 
-    func updateTargetDuration(_ duration: Double?) {
-        updateActive { $0.targetDuration = duration }
+    /// Met à jour la durée cible. Si `draftId` est fourni, modifie ce brouillon spécifique ;
+    /// sinon met à jour le brouillon actif.
+    func updateTargetDuration(_ duration: Double?, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].targetDuration = duration
         save()
-        // Force objectWillChange so CameraScreen refreshes the remaining indicator
-        objectWillChange.send()
     }
 
     // MARK: - Helpers privés
