@@ -5,7 +5,7 @@ import Combine
 final class ExportViewModel: ObservableObject {
 
     enum State {
-        case idle
+        case idle           // configuration filtre + silence avant de lancer
         case exporting(Double)
         case ready(URL)
         case failed(String)
@@ -15,12 +15,16 @@ final class ExportViewModel: ObservableObject {
     @Published var saveMessage: String?
     @Published var showShareSheet = false
 
+    @Published var filterPreset: FilterPreset
+    @Published var cutSilence: Bool = false
+
     private let store: VlogStore
     private let entitlements: Entitlements
 
     init(store: VlogStore, entitlements: Entitlements) {
-        self.store = store
+        self.store        = store
         self.entitlements = entitlements
+        self.filterPreset = store.filterPreset
     }
 
     var resolutionLabel: String { entitlements.exportResolution.label }
@@ -28,6 +32,13 @@ final class ExportViewModel: ObservableObject {
     var exportedURL: URL? {
         if case .ready(let url) = state { return url }
         return nil
+    }
+
+    // MARK: - Configuration
+
+    func setFilter(_ preset: FilterPreset) {
+        filterPreset = preset
+        store.updateFilter(preset)
     }
 
     // MARK: - Export
@@ -44,11 +55,13 @@ final class ExportViewModel: ObservableObject {
             let renderSize = store.aspectRatio.renderSize(scale: entitlements.exportResolution.scale)
             let (composition, videoComposition) = try await VideoAssembler.build(
                 urls: urls,
-                renderSize: renderSize
+                renderSize: renderSize,
+                cutSilence: cutSilence
             )
             let output = try await Exporter.export(
                 composition: composition,
-                videoComposition: videoComposition
+                videoComposition: videoComposition,
+                filterPreset: filterPreset
             ) { [weak self] progress in
                 Task { @MainActor in
                     guard let self else { return }

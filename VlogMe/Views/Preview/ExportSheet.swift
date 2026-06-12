@@ -12,11 +12,8 @@ struct ExportSheet: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
             VStack(spacing: 28) { content }.padding(32)
-        }
-        .task {
-            if case .idle = vm.state { await vm.export() }
         }
         .sheet(isPresented: $vm.showShareSheet) {
             if let url = vm.exportedURL { ShareSheet(items: [url]) }
@@ -26,20 +23,88 @@ struct ExportSheet: View {
     @ViewBuilder
     private var content: some View {
         switch vm.state {
-        case .idle, .exporting: exportingView
+        case .idle:              configView
+        case .exporting:        exportingView
         case .ready:            readyView
         case .failed(let msg):  failedView(msg)
         }
     }
 
-    // MARK: - States
+    // MARK: - Configuration (choix filtre + silence)
+
+    private var configView: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            Text("Préparer l'export")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+
+            // Filtre
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Filtre")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(FilterPreset.allCases) { preset in
+                            FilterChip(
+                                label: preset.label,
+                                isSelected: vm.filterPreset == preset
+                            ) {
+                                vm.setFilter(preset)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+
+            // Silence automatique
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $vm.cutSilence) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Couper les silences")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Text("Supprime les passages sans son avant l'export")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
+                .tint(Color.accentOrange)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await vm.export() }
+            } label: {
+                HStack {
+                    Spacer()
+                    Label("Exporter  \(vm.resolutionLabel)", systemImage: "square.and.arrow.up")
+                        .font(.subheadline.weight(.bold))
+                    Spacer()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.accentOrange)
+            .controlSize(.large)
+
+            Button("Annuler") { dismiss() }
+                .foregroundStyle(.white.opacity(0.5))
+                .font(.footnote)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Encodage en cours
 
     private var exportingView: some View {
         VStack(spacing: 20) {
             ProgressView(value: progressValue)
                 .progressViewStyle(.linear)
                 .tint(Color.accentOrange)
-            Text("Encodage… \(Int(progressValue * 100)) %")
+            Text(progressLabel)
                 .font(.headline)
                 .foregroundStyle(.white)
             Text(vm.resolutionLabel)
@@ -47,6 +112,8 @@ struct ExportSheet: View {
                 .foregroundStyle(.white.opacity(0.5))
         }
     }
+
+    // MARK: - Prêt
 
     private var readyView: some View {
         VStack(spacing: 24) {
@@ -85,9 +152,9 @@ struct ExportSheet: View {
 
             Divider().background(.white.opacity(0.2))
 
-            // New vlog — clears segments and returns to camera
+            // Crée un nouveau brouillon (l'ancien reste dans la bibliothèque)
             Button {
-                store.clear()
+                store.createDraft()
                 dismiss()
             } label: {
                 Label("Nouveau vlog", systemImage: "plus.circle")
@@ -102,6 +169,8 @@ struct ExportSheet: View {
                 .font(.footnote)
         }
     }
+
+    // MARK: - Erreur
 
     private func failedView(_ message: String) -> some View {
         VStack(spacing: 16) {
@@ -119,8 +188,37 @@ struct ExportSheet: View {
         }
     }
 
+    // MARK: - Helpers
+
     private var progressValue: Double {
         if case .exporting(let p) = vm.state { return p }
         return 0
+    }
+
+    private var progressLabel: String {
+        let pct = Int((progressValue * 100).rounded())
+        if vm.cutSilence && progressValue < 0.15 { return "Analyse audio…" }
+        if vm.filterPreset != .none && progressValue > 0.60 { return "Application du filtre…" }
+        return "Encodage… \(pct) %"
+    }
+}
+
+// MARK: - Filter chip
+
+private struct FilterChip: View {
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isSelected ? .black : .white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color.accentOrange : Color.white.opacity(0.12), in: Capsule())
+        }
+        .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
 }

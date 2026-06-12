@@ -1,53 +1,96 @@
 import Foundation
 import Combine
 
-/// La liste ordonnée des segments du vlog en cours + sa persistance (brouillons, §7).
+/// Bibliothèque de brouillons de vlogs.
 ///
-/// Chaque segment est un vrai fichier `.mov` dans `Documents/segments/`.
-/// Un index JSON (`vlog_index.json`) garde l'ordre, le format et les métadonnées.
-/// À la réouverture de l'app, on recharge l'index → le vlog réapparaît intact.
+/// Expose l'interface "brouillon actif" (segments, aspectRatio, url, newSegmentURL…) pour la
+/// compatibilité avec CameraViewModel / ExportViewModel / PreviewViewModel. Fournit en plus
+/// la gestion multi-brouillons (createDraft, activateDraft, setDefault, deleteDraft…).
 @MainActor
 final class VlogStore: ObservableObject {
 
+    // MARK: - Proxy brouillon actif (compatible avec le code existant)
+
     @Published private(set) var segments: [VideoSegment] = []
     @Published var aspectRatio: AspectRatio = .vertical {
-        didSet { save() }
+        didSet {
+            guard !isSyncing else { return }
+            updateActive { $0.aspectRatio = self.aspectRatio }
+            save()
+        }
     }
 
-    let segmentsDirectory: URL
-    private let indexURL: URL
+    // MARK: - État multi-brouillons
 
+    @Published private(set) var drafts: [VlogDraft] = []
+    @Published private(set) var activeId: UUID?
+    @Published private(set) var defaultId: UUID?
+
+    var activeDraft: VlogDraft? { drafts.first(where: { $0.id == activeId }) }
     var totalDuration: Double { segments.reduce(0) { $0 + $1.durationSeconds } }
     var hasSegments: Bool { !segments.isEmpty }
+    var targetDuration: Double? { activeDraft?.targetDuration }
+    var filterPreset: FilterPreset { activeDraft?.filterPreset ?? .none }
+
+    // MARK: - Privé
+
+    private let vlogsRoot: URL
+    private let indexURL: URL
+    private var isSyncing = false
+
+    // MARK: - Init
 
     init() {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        segmentsDirectory = documents.appendingPathComponent("segments", isDirectory: true)
-        indexURL = documents.appendingPathComponent("vlog_index.json")
-        try? FileManager.default.createDirectory(at: segmentsDirectory, withIntermediateDirectories: true)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        vlogsRoot = docs.appendingPathComponent("vlogs", isDirectory: true)
+        indexURL  = docs.appendingPathComponent("vlogs_index.json")
+        try? FileManager.default.createDirectory(at: vlogsRoot, withIntermediateDirectories: true)
         load()
+        if drafts.isEmpty {
+            let d = newDraftInternal()
+            defaultId = d.id
+            save()
+        }
     }
 
-    // MARK: - URLs
+    // MARK: - Dossiers segments
 
-    /// Résout le chemin absolu d'un segment au moment de l'exécution.
+    func segmentsDirectory(for draftId: UUID) -> URL {
+        let dir = vlogsRoot
+            .appendingPathComponent(draftId.uuidString, isDirectory: true)
+            .appendingPathComponent("segments", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Dossier segments du brouillon actif (compat SegmentStackView).
+    var segmentsDirectory: URL {
+        guard let id = activeId else { return vlogsRoot }
+        return segmentsDirectory(for: id)
+    }
+
+    // MARK: - URLs (brouillon actif)
+
     func url(for segment: VideoSegment) -> URL {
         segmentsDirectory.appendingPathComponent(segment.fileName)
     }
 
-    /// Une URL de fichier neuve et unique pour enregistrer le prochain segment.
+    func url(for segment: VideoSegment, in draft: VlogDraft) -> URL {
+        segmentsDirectory(for: draft.id).appendingPathComponent(segment.fileName)
+    }
+
     func newSegmentURL() -> URL {
         segmentsDirectory.appendingPathComponent("\(UUID().uuidString).mov")
     }
 
-    // MARK: - Mutations
+    // MARK: - Mutations segments (brouillon actif)
 
     func append(_ segment: VideoSegment) {
-        segments.append(segment)
+        updateActive { $0.segments.append(segment) }
+        syncProxy()
         save()
     }
 
-    /// Supprime le dernier segment (utilisé par « Refaire » et « Supprimer », §4).
     func removeLast() {
         guard let last = segments.last else { return }
         delete(last)
@@ -55,48 +98,149 @@ final class VlogStore: ObservableObject {
 
     func delete(_ segment: VideoSegment) {
         try? FileManager.default.removeItem(at: url(for: segment))
-        segments.removeAll { $0.id == segment.id }
+        updateActive { $0.segments.removeAll { $0.id == segment.id } }
+        syncProxy()
         save()
     }
 
-    /// Nettoyage complet (vlog exporté ou abandonné) — évite de saturer le stockage (§5, §11).
+    /// Vide les segments du brouillon actif (segments déjà exportés).
     func clear() {
-        for segment in segments {
-            try? FileManager.default.removeItem(at: url(for: segment))
+        guard let draft = activeDraft else { return }
+        for seg in draft.segments {
+            try? FileManager.default.removeItem(at: url(for: seg, in: draft))
         }
-        segments.removeAll()
+        updateActive { $0.segments = [] }
+        syncProxy()
         save()
+    }
+
+    // MARK: - Gestion des brouillons
+
+    @discardableResult
+    func createDraft(name: String = "") -> VlogDraft {
+        let d = newDraftInternal(name: name)
+        save()
+        return d
+    }
+
+    @discardableResult
+    private func newDraftInternal(name: String = "") -> VlogDraft {
+        var d = VlogDraft(name: name)
+        if let current = activeDraft { d.aspectRatio = current.aspectRatio }
+        _ = segmentsDirectory(for: d.id)
+        drafts.append(d)
+        activateInternal(d.id)
+        return d
+    }
+
+    func activateDraft(_ id: UUID) {
+        guard drafts.contains(where: { $0.id == id }) else { return }
+        activateInternal(id)
+        save()
+    }
+
+    func setDefault(_ id: UUID) {
+        guard drafts.contains(where: { $0.id == id }) else { return }
+        defaultId = id
+        save()
+    }
+
+    func deleteDraft(_ id: UUID) {
+        guard let draft = drafts.first(where: { $0.id == id }) else { return }
+        try? FileManager.default.removeItem(at: vlogsRoot.appendingPathComponent(draft.id.uuidString))
+        drafts.removeAll { $0.id == id }
+        if defaultId == id { defaultId = drafts.first?.id }
+        if activeId == id {
+            if let first = drafts.first { activateInternal(first.id) }
+            else { newDraftInternal(); defaultId = activeId }
+        }
+        save()
+    }
+
+    func renameDraft(_ id: UUID, name: String) {
+        mutate(id) { $0.name = name }
+        save()
+    }
+
+    func updateFilter(_ preset: FilterPreset) {
+        updateActive { $0.filterPreset = preset }
+        save()
+    }
+
+    /// Met à jour la durée cible. Si `draftId` est fourni, modifie ce brouillon spécifique ;
+    /// sinon met à jour le brouillon actif.
+    func updateTargetDuration(_ duration: Double?, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].targetDuration = duration
+        save()
+    }
+
+    // MARK: - Helpers privés
+
+    private func syncProxy() {
+        isSyncing = true
+        if let draft = activeDraft {
+            segments = draft.segments
+            aspectRatio = draft.aspectRatio
+        } else {
+            segments = []
+            aspectRatio = .vertical
+        }
+        isSyncing = false
+    }
+
+    private func activateInternal(_ id: UUID) {
+        activeId = id
+        syncProxy()
+    }
+
+    private func updateActive(_ mutation: (inout VlogDraft) -> Void) {
+        guard let id = activeId,
+              let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        mutation(&drafts[idx])
+    }
+
+    private func mutate(_ id: UUID, _ fn: (inout VlogDraft) -> Void) {
+        guard let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        fn(&drafts[idx])
     }
 
     // MARK: - Persistance
 
-    private struct Index: Codable {
-        var aspectRatio: AspectRatio
-        var segments: [VideoSegment]
+    private struct LibraryIndex: Codable {
+        var activeId: UUID?
+        var defaultId: UUID?
+        var drafts: [VlogDraft]
     }
 
     private func save() {
-        let index = Index(aspectRatio: aspectRatio, segments: segments)
-        do {
-            let data = try JSONEncoder().encode(index)
-            try data.write(to: indexURL, options: .atomic)
-        } catch {
-            print("[VlogStore] échec de sauvegarde de l'index : \(error)")
-        }
+        let index = LibraryIndex(activeId: activeId, defaultId: defaultId, drafts: drafts)
+        guard let data = try? JSONEncoder().encode(index) else { return }
+        try? data.write(to: indexURL, options: .atomic)
     }
 
     private func load() {
         guard
             let data = try? Data(contentsOf: indexURL),
-            let index = try? JSONDecoder().decode(Index.self, from: data)
+            let index = try? JSONDecoder().decode(LibraryIndex.self, from: data)
         else { return }
 
-        aspectRatio = index.aspectRatio
-        // Défensif : on écarte les segments dont le fichier a disparu.
-        let survivors = index.segments.filter {
-            FileManager.default.fileExists(atPath: segmentsDirectory.appendingPathComponent($0.fileName).path)
+        drafts = index.drafts.map { draft in
+            var d = draft
+            let dir = segmentsDirectory(for: draft.id)
+            d.segments = d.segments.filter {
+                FileManager.default.fileExists(atPath: dir.appendingPathComponent($0.fileName).path)
+            }
+            return d
         }
-        segments = survivors
-        if survivors.count != index.segments.count { save() }
+        defaultId = index.defaultId
+
+        let targetId = index.activeId ?? defaultId ?? drafts.first?.id
+        if let id = targetId, drafts.contains(where: { $0.id == id }) {
+            activateInternal(id)
+        } else if let first = drafts.first {
+            activateInternal(first.id)
+        }
     }
 }

@@ -4,6 +4,7 @@ struct CameraScreen: View {
 
     @StateObject private var vm: CameraViewModel
     @Binding private var showPreview: Bool
+    @State private var showLibrary = false
 
     init(camera: CameraService, store: VlogStore, showPreview: Binding<Bool>) {
         _vm = StateObject(wrappedValue: CameraViewModel(camera: camera, store: store))
@@ -12,7 +13,7 @@ struct CameraScreen: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             CameraPreviewLayerView(
                 session: vm.camera.session,
@@ -23,6 +24,9 @@ struct CameraScreen: View {
 
             VStack(spacing: 0) {
                 topBar
+                if let progress = vm.targetProgress {
+                    targetBar(progress: progress)
+                }
                 Spacer()
                 zoomIndicator
                 if vm.hasSegments {
@@ -41,16 +45,55 @@ struct CameraScreen: View {
         .statusBarHidden(true)
         .onAppear { vm.onAppear() }
         .onDisappear { vm.onDisappear() }
+        .sheet(isPresented: $showLibrary) {
+            VlogLibraryScreen()
+                .environmentObject(vm.store)
+        }
     }
 
     // MARK: - Top bar
 
     private var topBar: some View {
-        HStack {
-            DurationLabel(seconds: vm.totalDuration, isRecording: vm.isRecording)
+        HStack(spacing: 8) {
+            // Bibliothèque de vlogs
+            Button {
+                showLibrary = true
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "rectangle.stack")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.45), in: Capsule())
+
+                    if vm.draftCount > 1 {
+                        Text("\(vm.draftCount)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.black)
+                            .padding(3)
+                            .background(Color.accentOrange, in: Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .disabled(vm.controlsLocked)
+            .opacity(vm.controlsLocked ? 0.35 : 1)
+            .accessibilityLabel("Bibliothèque de vlogs")
+
+            // Durée (+ restant si durée cible active)
+            VStack(alignment: .leading, spacing: 0) {
+                DurationLabel(seconds: vm.totalDuration, isRecording: vm.isRecording)
+                if let remaining = vm.remainingDuration {
+                    Text("→ \(formatDuration(remaining)) restantes")
+                        .font(.system(size: 10, design: .monospaced).weight(.medium))
+                        .foregroundStyle(remaining < 10 ? Color.red.opacity(0.9) : .white.opacity(0.6))
+                        .padding(.leading, 12)
+                }
+            }
+
             Spacer()
 
-            // Torch (front camera has no torch)
             if vm.facing == .back {
                 Button { vm.toggleTorch() } label: {
                     Image(systemName: vm.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
@@ -60,7 +103,6 @@ struct CameraScreen: View {
                         .padding(.vertical, 6)
                         .background(.black.opacity(0.45), in: Capsule())
                 }
-                .opacity(vm.controlsLocked ? 1 : 1)
                 .accessibilityLabel(vm.isTorchOn ? "Éteindre la lampe" : "Allumer la lampe")
             }
 
@@ -79,7 +121,26 @@ struct CameraScreen: View {
         .padding(.horizontal, 16)
     }
 
-    // MARK: - Zoom indicator (visible only when zoomed)
+    // MARK: - Barre de progression durée cible
+
+    private func targetBar(progress: Double) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.12))
+                    .frame(height: 3)
+                Capsule()
+                    .fill(progress >= 1 ? Color.green : Color.accentOrange)
+                    .frame(width: geo.size.width * progress, height: 3)
+                    .animation(.linear(duration: 0.1), value: progress)
+            }
+        }
+        .frame(height: 3)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+    }
+
+    // MARK: - Zoom indicator
 
     @ViewBuilder
     private var zoomIndicator: some View {
@@ -145,5 +206,10 @@ struct CameraScreen: View {
         .opacity(disabled ? 0.35 : 1)
         .disabled(disabled)
         .accessibilityLabel(label)
+    }
+
+    private func formatDuration(_ s: Double) -> String {
+        let t = Int(s.rounded())
+        return t < 60 ? "\(t) s" : String(format: "%d:%02d", t / 60, t % 60)
     }
 }
