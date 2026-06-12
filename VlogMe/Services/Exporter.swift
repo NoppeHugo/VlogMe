@@ -19,60 +19,118 @@ enum ExportError: LocalizedError {
     }
 }
 
-/// Encode la composition finale et l'écrit sur le disque (cf. §4, écran 3 ; Phase 4).
+/// Encode la composition finale (+ filtre optionnel) en MP4.
 struct Exporter {
 
-    /// Encode `composition` (+ `videoComposition`) en MP4 et remonte la progression (0→1).
+    /// - Parameters:
+    ///   - composition: la composition assemblée par `VideoAssembler`.
+    ///   - videoComposition: les instructions de rendu (transforms, format).
+    ///   - filterPreset: filtre vintage à appliquer en post-traitement (`.none` = pas de filtre).
+    ///   - onProgress: progression de 0 à 1.
     static func export(
         composition: AVComposition,
         videoComposition: AVVideoComposition,
+        filterPreset: FilterPreset = .none,
         onProgress: @escaping (Double) -> Void
     ) async throws -> URL {
 
-        let outputURL = FileManager.default.temporaryDirectory
+        // Fraction de progression réservée à la première passe
+        let step1Fraction: Double = filterPreset == .none ? 1.0 : 0.62
+
+        let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("VlogMe-\(UUID().uuidString).mp4")
-        try? FileManager.default.removeItem(at: outputURL)
+        try? FileManager.default.removeItem(at: tempURL)
 
         guard let session = AVAssetExportSession(
             asset: composition,
             presetName: AVAssetExportPresetHighestQuality
         ) else { throw ExportError.cannotCreateSession }
 
-        session.outputURL = outputURL
-        session.outputFileType = .mp4
+        session.outputURL       = tempURL
+        session.outputFileType  = .mp4
         session.videoComposition = videoComposition
         session.shouldOptimizeForNetworkUse = true
 
-        // Suivi de progression : on échantillonne `session.progress` pendant l'encodage.
         let pollTask = Task {
             while !Task.isCancelled {
-                onProgress(Double(session.progress))
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0,1 s
+                onProgress(Double(session.progress) * step1Fraction)
+                try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
         defer { pollTask.cancel() }
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        try await runSession(session)
+
+        guard filterPreset != .none else {
+            onProgress(1)
+            return tempURL
+        }
+
+        // Deuxième passe : application du filtre CIImage
+        let filteredURL = try await applyFilter(filterPreset, to: tempURL) { p in
+            onProgress(step1Fraction + p * (1 - step1Fraction))
+        }
+        try? FileManager.default.removeItem(at: tempURL)
+        onProgress(1)
+        return filteredURL
+    }
+
+    // MARK: - Filtre (2e passe)
+
+    private static func applyFilter(
+        _ preset: FilterPreset,
+        to url: URL,
+        onProgress: @escaping (Double) -> Void
+    ) async throws -> URL {
+        let asset = AVURLAsset(url: url)
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("VlogMe-filtered-\(UUID().uuidString).mp4")
+
+        let filterComposition = AVVideoComposition(asset: asset) { request in
+            let output = preset.apply(to: request.sourceImage.clampedToExtent())
+                .cropped(to: request.sourceImage.extent)
+            request.finish(with: output, context: nil)
+        }
+
+        guard let session = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else { throw ExportError.cannotCreateSession }
+
+        session.outputURL        = outputURL
+        session.outputFileType   = .mp4
+        session.videoComposition = filterComposition
+        session.shouldOptimizeForNetworkUse = true
+
+        let pollTask = Task {
+            while !Task.isCancelled {
+                onProgress(Double(session.progress))
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+        defer { pollTask.cancel() }
+
+        try await runSession(session)
+        return outputURL
+    }
+
+    // MARK: - Helper
+
+    private static func runSession(_ session: AVAssetExportSession) async throws {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             session.exportAsynchronously {
                 switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .cancelled:
-                    continuation.resume(throwing: ExportError.cancelled)
-                case .failed:
-                    continuation.resume(throwing: session.error ?? ExportError.unknown)
-                default:
-                    continuation.resume(throwing: ExportError.unknown)
+                case .completed: cont.resume()
+                case .cancelled: cont.resume(throwing: ExportError.cancelled)
+                case .failed:    cont.resume(throwing: session.error ?? ExportError.unknown)
+                default:         cont.resume(throwing: ExportError.unknown)
                 }
             }
         }
-
-        onProgress(1)
-        return outputURL
     }
 }
 
-/// Sauvegarde dans la pellicule via la permission « ajout seul » (cf. §6.2/§6.4).
+/// Sauvegarde dans la pellicule (permission « ajout seul »).
 enum PhotoSaver {
 
     static func save(_ url: URL) async throws {

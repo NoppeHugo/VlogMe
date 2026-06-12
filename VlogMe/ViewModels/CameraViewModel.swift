@@ -15,20 +15,38 @@ final class CameraViewModel: ObservableObject {
     private var timer: AnyCancellable?
     private var segmentStart: Date?
 
-    var isRecording: Bool { camera.isRecording }
+    var isRecording: Bool    { camera.isRecording }
     var facing: CameraFacing { camera.facing }
-    var isTorchOn: Bool { camera.isTorchOn }
+    var isTorchOn: Bool      { camera.isTorchOn }
     var aspectRatio: AspectRatio { store.aspectRatio }
     var segments: [VideoSegment] { store.segments }
-    var hasSegments: Bool { store.hasSegments }
-    var canFinish: Bool { store.hasSegments && !camera.isRecording }
+    var hasSegments: Bool    { store.hasSegments }
+    var canFinish: Bool      { store.hasSegments && !camera.isRecording }
     var controlsLocked: Bool { camera.isRecording }
+    var draftName: String    { store.activeDraft?.name ?? "Vlog" }
+    var draftCount: Int      { store.drafts.count }
 
     var totalDuration: Double { store.totalDuration + elapsedInCurrentSegment }
 
+    // MARK: - Durée cible
+
+    var targetDuration: Double? { store.targetDuration }
+
+    var targetProgress: Double? {
+        guard let t = store.targetDuration, t > 0 else { return nil }
+        return min(1.0, totalDuration / t)
+    }
+
+    var remainingDuration: Double? {
+        guard let t = store.targetDuration else { return nil }
+        return max(0, t - totalDuration)
+    }
+
+    // MARK: - Init
+
     init(camera: CameraService, store: VlogStore) {
         self.camera = camera
-        self.store = store
+        self.store  = store
 
         camera.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
@@ -78,7 +96,7 @@ final class CameraViewModel: ObservableObject {
     }
 
     func deleteLastSegment() { store.removeLast() }
-    func redoLastSegment() { store.removeLast() }
+    func redoLastSegment()   { store.removeLast() }
 
     func toggleTorch() { camera.toggleTorch() }
 
@@ -91,7 +109,7 @@ final class CameraViewModel: ObservableObject {
         camera.focusAndExpose(at: devicePoint)
     }
 
-    // MARK: - Private
+    // MARK: - Privé
 
     private func handleFinishedSegment(at url: URL) async {
         let asset = AVURLAsset(url: url)
