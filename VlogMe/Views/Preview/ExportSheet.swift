@@ -1,10 +1,14 @@
 import SwiftUI
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 struct ExportSheet: View {
 
     @StateObject private var vm: ExportViewModel
     @EnvironmentObject private var store: VlogStore
     @Environment(\.dismiss) private var dismiss
+
+    @State private var baseThumb: UIImage? = nil
 
     init(store: VlogStore, entitlements: Entitlements) {
         _vm = StateObject(wrappedValue: ExportViewModel(store: store, entitlements: entitlements))
@@ -15,6 +19,7 @@ struct ExportSheet: View {
             Color.appBackground.ignoresSafeArea()
             VStack(spacing: 28) { content }.padding(32)
         }
+        .task { await loadThumbnail() }
         .sheet(isPresented: $vm.showShareSheet) {
             if let url = vm.exportedURL { ShareSheet(items: [url]) }
         }
@@ -33,10 +38,15 @@ struct ExportSheet: View {
     // MARK: - Configuration (choix filtre + silence)
 
     private var configView: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 24) {
             Text("Préparer l'export")
                 .font(.title2.weight(.bold))
                 .foregroundStyle(.white)
+
+            // Aperçu du filtre
+            if let thumb = baseThumb {
+                FilterPreviewImage(image: thumb, preset: vm.filterPreset)
+            }
 
             // Filtre
             VStack(alignment: .leading, spacing: 12) {
@@ -81,7 +91,7 @@ struct ExportSheet: View {
             } label: {
                 HStack {
                     Spacer()
-                    Label("Exporter  \(vm.resolutionLabel)", systemImage: "square.and.arrow.up")
+                    Label("Exporter · \(vm.resolutionLabel)", systemImage: "square.and.arrow.up")
                         .font(.subheadline.weight(.bold))
                     Spacer()
                 }
@@ -152,7 +162,6 @@ struct ExportSheet: View {
 
             Divider().background(.white.opacity(0.2))
 
-            // Crée un nouveau brouillon (l'ancien reste dans la bibliothèque)
             Button {
                 store.createDraft()
                 dismiss()
@@ -200,6 +209,38 @@ struct ExportSheet: View {
         if vm.cutSilence && progressValue < 0.15 { return "Analyse audio…" }
         if vm.filterPreset != .none && progressValue > 0.60 { return "Application du filtre…" }
         return "Encodage… \(pct) %"
+    }
+
+    private func loadThumbnail() async {
+        guard let first = store.segments.first else { return }
+        let url = store.url(for: first)
+        baseThumb = await ThumbnailGenerator.thumbnail(for: url, maxSize: 600)
+    }
+}
+
+// MARK: - Aperçu filtre (image animée)
+
+private struct FilterPreviewImage: View {
+    let image: UIImage
+    let preset: FilterPreset
+
+    var filtered: UIImage {
+        guard preset != .none,
+              let ci = CIImage(image: image) else { return image }
+        let output = preset.apply(to: ci)
+        let ctx = CIContext()
+        guard let cg = ctx.createCGImage(output, from: ci.extent) else { return image }
+        return UIImage(cgImage: cg)
+    }
+
+    var body: some View {
+        Image(uiImage: filtered)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(maxWidth: .infinity)
+            .frame(height: 160)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .animation(.easeInOut(duration: 0.25), value: preset.id)
     }
 }
 
