@@ -25,10 +25,6 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
-    dependencies:
-      - target: VlogMeWidgetExtension
-        embed: true
-
   VlogMeWidgetExtension:
     type: app-extension
     platform: iOS
