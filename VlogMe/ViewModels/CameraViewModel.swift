@@ -23,16 +23,18 @@ final class CameraViewModel: ObservableObject {
     private let impactLight  = UIImpactFeedbackGenerator(style: .light)
     private let notif        = UINotificationFeedbackGenerator()
 
-    var isRecording: Bool    { camera.isRecording }
-    var facing: CameraFacing { camera.facing }
-    var isTorchOn: Bool      { camera.isTorchOn }
+    var isRecording: Bool      { camera.isRecording }
+    var facing: CameraFacing   { camera.facing }
+    var isTorchOn: Bool        { camera.isTorchOn }
     var aspectRatio: AspectRatio { store.aspectRatio }
     var segments: [VideoSegment] { store.segments }
-    var hasSegments: Bool    { store.hasSegments }
-    var canFinish: Bool      { store.hasSegments && !camera.isRecording }
-    var controlsLocked: Bool { camera.isRecording }
-    var draftName: String    { store.activeDraft?.name ?? "Vlog" }
-    var draftCount: Int      { store.drafts.count }
+    var hasSegments: Bool      { store.hasSegments }
+    var canFinish: Bool        { store.hasSegments && !camera.isRecording }
+    var controlsLocked: Bool   { camera.isRecording }
+    var draftName: String      { store.activeDraft?.name ?? "Vlog" }
+    var draftCount: Int        { store.drafts.count }
+    var zoomPreset: ZoomPreset { camera.zoomPreset }
+    var hasUltraWide: Bool     { camera.hasUltraWide }
 
     var totalDuration: Double { store.totalDuration + elapsedInCurrentSegment }
 
@@ -75,6 +77,12 @@ final class CameraViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        // Prépare les générateurs pour réduire la latence haptique
+        impactHeavy.prepare()
+        impactMedium.prepare()
+        impactLight.prepare()
+        notif.prepare()
     }
 
     // MARK: - Lifecycle
@@ -82,6 +90,10 @@ final class CameraViewModel: ObservableObject {
     func onAppear() {
         camera.configure()
         camera.start()
+        // Re-prépare après un retour en premier plan
+        impactHeavy.prepare()
+        impactMedium.prepare()
+        impactLight.prepare()
     }
 
     func onDisappear() {
@@ -95,11 +107,13 @@ final class CameraViewModel: ObservableObject {
             stopTimer()
             camera.stopRecording()
             impactMedium.impactOccurred()
+            impactMedium.prepare()
         } else {
             let url = store.newSegmentURL()
             camera.startRecording(to: url)
             startTimer()
             impactHeavy.impactOccurred()
+            impactHeavy.prepare()
         }
     }
 
@@ -113,7 +127,16 @@ final class CameraViewModel: ObservableObject {
             zoomFactor = 1.0
             camera.switchCamera()
             impactLight.impactOccurred()
+            impactLight.prepare()
         }
+    }
+
+    func setZoomPreset(_ preset: ZoomPreset) {
+        guard !camera.isRecording else { return }
+        camera.setZoomPreset(preset)
+        zoomFactor = 1.0
+        impactLight.impactOccurred()
+        impactLight.prepare()
     }
 
     func toggleAspect() {
@@ -128,7 +151,8 @@ final class CameraViewModel: ObservableObject {
         let url = store.newSegmentURL()
         camera.startRecording(to: url)
         startTimer()
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        impactHeavy.impactOccurred()
+        impactHeavy.prepare()
     }
 
     func toggleTorch() { camera.toggleTorch() }
@@ -148,7 +172,7 @@ final class CameraViewModel: ObservableObject {
         let asset = AVURLAsset(url: url)
         let measured = (try? await asset.load(.duration).seconds) ?? elapsedInCurrentSegment
         let duration = measured.isFinite ? measured : elapsedInCurrentSegment
-        let segment = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
+        let segment  = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
         store.append(segment)
         elapsedInCurrentSegment = 0
 
@@ -156,8 +180,8 @@ final class CameraViewModel: ObservableObject {
             pendingCameraFlip = false
             zoomFactor = 1.0
             camera.switchCamera()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            // Laisser le temps à la session de basculer avant de relancer l'enregistrement
+            impactLight.impactOccurred()
+            impactLight.prepare()
             try? await Task.sleep(nanoseconds: 350_000_000)
             let newURL = store.newSegmentURL()
             camera.startRecording(to: newURL)

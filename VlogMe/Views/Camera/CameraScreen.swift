@@ -29,6 +29,7 @@ struct CameraScreen: View {
                 }
                 Spacer()
                 zoomIndicator
+                zoomPresetButtons
                 if vm.hasSegments {
                     SegmentStackView(
                         segments: vm.segments,
@@ -154,6 +155,39 @@ struct CameraScreen: View {
                 .padding(.bottom, 8)
                 .transition(.opacity)
         }
+    }
+
+    // MARK: - Zoom preset buttons (.5× / 1× / 2×)
+
+    private var zoomPresetButtons: some View {
+        HStack(spacing: 6) {
+            if vm.hasUltraWide {
+                zoomButton(.ultraWide)
+            }
+            zoomButton(.standard)
+            zoomButton(.tele)
+        }
+        .padding(.bottom, 8)
+    }
+
+    private func zoomButton(_ preset: ZoomPreset) -> some View {
+        let selected = vm.zoomPreset == preset
+        return Button {
+            vm.setZoomPreset(preset)
+        } label: {
+            Text(preset.label)
+                .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                .foregroundStyle(selected ? .black : .white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    selected ? Color.accentOrange : Color.black.opacity(0.45),
+                    in: Capsule()
+                )
+        }
+        .disabled(vm.isRecording)
+        .opacity(vm.isRecording ? 0.4 : 1)
+        .animation(.easeInOut(duration: 0.15), value: selected)
     }
 
     // MARK: - Bottom controls
