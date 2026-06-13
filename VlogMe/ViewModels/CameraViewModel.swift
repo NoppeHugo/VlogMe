@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import UIKit
 
 @MainActor
 final class CameraViewModel: ObservableObject {
@@ -10,10 +11,12 @@ final class CameraViewModel: ObservableObject {
 
     @Published private(set) var elapsedInCurrentSegment: Double = 0
     @Published private(set) var zoomFactor: CGFloat = 1.0
+    @Published private(set) var isSwitchingCamera = false
 
     private var cancellables = Set<AnyCancellable>()
     private var timer: AnyCancellable?
     private var segmentStart: Date?
+    private var pendingCameraFlip = false
 
     var isRecording: Bool    { camera.isRecording }
     var facing: CameraFacing { camera.facing }
@@ -58,6 +61,15 @@ final class CameraViewModel: ObservableObject {
         camera.onSegmentFinished = { [weak self] url in
             Task { await self?.handleFinishedSegment(at: url) }
         }
+
+        NotificationCenter.default.publisher(for: .vlogmeStartRecording)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, !self.camera.isRecording else { return }
+                    self.toggleRecording()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Lifecycle
@@ -77,17 +89,27 @@ final class CameraViewModel: ObservableObject {
         if camera.isRecording {
             stopTimer()
             camera.stopRecording()
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         } else {
             let url = store.newSegmentURL()
             camera.startRecording(to: url)
             startTimer()
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         }
     }
 
     func switchCamera() {
-        guard !camera.isRecording else { return }
-        zoomFactor = 1.0
-        camera.switchCamera()
+        if camera.isRecording {
+            // Couper le segment, retourner la caméra, reprendre
+            pendingCameraFlip = true
+            isSwitchingCamera = true
+            stopTimer()
+            camera.stopRecording()
+        } else {
+            zoomFactor = 1.0
+            camera.switchCamera()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
     }
 
     func toggleAspect() {
@@ -96,7 +118,14 @@ final class CameraViewModel: ObservableObject {
     }
 
     func deleteLastSegment() { store.removeLast() }
-    func redoLastSegment()   { store.removeLast() }
+
+    func redoLastSegment() {
+        store.removeLast()
+        let url = store.newSegmentURL()
+        camera.startRecording(to: url)
+        startTimer()
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+    }
 
     func toggleTorch() { camera.toggleTorch() }
 
@@ -118,6 +147,19 @@ final class CameraViewModel: ObservableObject {
         let segment = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
         store.append(segment)
         elapsedInCurrentSegment = 0
+
+        if pendingCameraFlip {
+            pendingCameraFlip = false
+            zoomFactor = 1.0
+            camera.switchCamera()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            // Laisser le temps à la session de basculer avant de relancer l'enregistrement
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            let newURL = store.newSegmentURL()
+            camera.startRecording(to: newURL)
+            startTimer()
+            isSwitchingCamera = false
+        }
     }
 
     private func startTimer() {
@@ -136,4 +178,10 @@ final class CameraViewModel: ObservableObject {
         timer = nil
         segmentStart = nil
     }
+}
+
+// MARK: - Notification
+
+extension Notification.Name {
+    static let vlogmeStartRecording = Notification.Name("pro.vlogme.startRecording")
 }

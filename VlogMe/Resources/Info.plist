@@ -29,6 +29,18 @@
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
 
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vlogme</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>pro.vlogme.app</string>
+		</dict>
+	</array>
+
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

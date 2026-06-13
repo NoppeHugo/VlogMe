@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 final class ExportViewModel: ObservableObject {
@@ -69,8 +70,10 @@ final class ExportViewModel: ObservableObject {
                 }
             }
             state = .ready(output)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             state = .failed(error.localizedDescription)
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
 
@@ -81,8 +84,10 @@ final class ExportViewModel: ObservableObject {
         do {
             try await PhotoSaver.save(url)
             saveMessage = "Enregistré dans Photos ✓"
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             saveMessage = error.localizedDescription
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
     }
 

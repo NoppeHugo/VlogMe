@@ -161,9 +161,11 @@ struct CameraScreen: View {
     private var bottomControls: some View {
         HStack {
             controlButton(
-                systemImage: "arrow.triangle.2.circlepath.camera",
+                systemImage: vm.isSwitchingCamera
+                    ? "arrow.triangle.2.circlepath.camera.fill"
+                    : "arrow.triangle.2.circlepath.camera",
                 label: "Changer de caméra",
-                disabled: vm.controlsLocked,
+                disabled: false,
                 action: vm.switchCamera
             )
 
