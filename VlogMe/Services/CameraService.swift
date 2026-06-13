@@ -112,10 +112,10 @@ final class CameraService: NSObject, ObservableObject {
                     connection.automaticallyAdjustsVideoMirroring = false
                     connection.isVideoMirrored = true
                 }
-            }
-            if connection.isVideoStabilizationSupported {
+                if connection.isVideoStabilizationSupported {
                     connection.preferredVideoStabilizationMode = .cinematicExtended
                 }
+            }
             self.movieOutput.startRecording(to: url, recordingDelegate: self)
         }
     }

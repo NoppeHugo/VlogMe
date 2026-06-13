@@ -229,7 +229,7 @@ final class CameraViewModel: ObservableObject {
                 self.elapsedInCurrentSegment = Date().timeIntervalSince(start)
             }
         // Auto-stop si durée max définie
-        if let maxDur = store.maxSegmentDuration {
+        if let maxDur = store.activeDraft?.maxSegmentDuration {
             maxDurationTimer = Timer.publish(every: maxDur, on: .main, in: .common)
                 .autoconnect()
                 .prefix(1)
