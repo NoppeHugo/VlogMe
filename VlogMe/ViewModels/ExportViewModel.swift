@@ -21,6 +21,7 @@ final class ExportViewModel: ObservableObject {
 
     private let store: VlogStore
     private let entitlements: Entitlements
+    private let notif = UINotificationFeedbackGenerator()
 
     init(store: VlogStore, entitlements: Entitlements) {
         self.store        = store
@@ -70,10 +71,10 @@ final class ExportViewModel: ObservableObject {
                 }
             }
             state = .ready(output)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            notif.notificationOccurred(.success)
         } catch {
             state = .failed(error.localizedDescription)
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            notif.notificationOccurred(.error)
         }
     }
 
@@ -84,10 +85,10 @@ final class ExportViewModel: ObservableObject {
         do {
             try await PhotoSaver.save(url)
             saveMessage = "Enregistré dans Photos ✓"
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            notif.notificationOccurred(.success)
         } catch {
             saveMessage = error.localizedDescription
-            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            notif.notificationOccurred(.error)
         }
     }
 

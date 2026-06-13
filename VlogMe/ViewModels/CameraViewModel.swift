@@ -18,6 +18,11 @@ final class CameraViewModel: ObservableObject {
     private var segmentStart: Date?
     private var pendingCameraFlip = false
 
+    private let impactHeavy  = UIImpactFeedbackGenerator(style: .heavy)
+    private let impactMedium = UIImpactFeedbackGenerator(style: .medium)
+    private let impactLight  = UIImpactFeedbackGenerator(style: .light)
+    private let notif        = UINotificationFeedbackGenerator()
+
     var isRecording: Bool    { camera.isRecording }
     var facing: CameraFacing { camera.facing }
     var isTorchOn: Bool      { camera.isTorchOn }
@@ -89,18 +94,17 @@ final class CameraViewModel: ObservableObject {
         if camera.isRecording {
             stopTimer()
             camera.stopRecording()
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            impactMedium.impactOccurred()
         } else {
             let url = store.newSegmentURL()
             camera.startRecording(to: url)
             startTimer()
-            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            impactHeavy.impactOccurred()
         }
     }
 
     func switchCamera() {
         if camera.isRecording {
-            // Couper le segment, retourner la caméra, reprendre
             pendingCameraFlip = true
             isSwitchingCamera = true
             stopTimer()
@@ -108,7 +112,7 @@ final class CameraViewModel: ObservableObject {
         } else {
             zoomFactor = 1.0
             camera.switchCamera()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            impactLight.impactOccurred()
         }
     }
 
