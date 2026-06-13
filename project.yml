@@ -1,6 +1,6 @@
 name: VlogMe
 options:
-  bundleIdPrefix: pro.vlogme
+  bundleIdPrefix: com.hugonoppe
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -21,7 +21,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: VlogMe/Resources/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: pro.vlogme.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.hugonoppe.vlogme
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
@@ -32,7 +32,7 @@ targets:
       - path: VlogMeWidgetExtension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: pro.vlogme.app.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.hugonoppe.vlogme.widget
         INFOPLIST_FILE: VlogMeWidgetExtension/Info.plist
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: NO
         SKIP_INSTALL: YES
@@ -46,6 +46,6 @@ targets:
       - path: VlogMeTests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: pro.vlogme.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.hugonoppe.vlogme.tests
     dependencies:
       - target: VlogMe
