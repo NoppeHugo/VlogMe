@@ -3,7 +3,6 @@ import SwiftUI
 @main
 struct VlogMeApp: App {
 
-    // Racine de composition : les trois services partagés vivent ici.
     @StateObject private var store = VlogStore()
     @StateObject private var camera = CameraService()
     @StateObject private var permissions = PermissionsManager()
@@ -17,6 +16,10 @@ struct VlogMeApp: App {
                 .environmentObject(permissions)
                 .environmentObject(entitlements)
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in
+                    guard url.scheme == "vlogme", url.host == "record" else { return }
+                    NotificationCenter.default.post(name: .vlogmeStartRecording, object: nil)
+                }
         }
     }
 }

@@ -25,6 +25,23 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
+    dependencies:
+      - target: VlogMeWidgetExtension
+        embed: true
+
+  VlogMeWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: VlogMeWidgetExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: pro.vlogme.app.widget
+        INFOPLIST_FILE: VlogMeWidgetExtension/Info.plist
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: NO
+        SKIP_INSTALL: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
 
   VlogMeTests:
     type: bundle.unit-test
