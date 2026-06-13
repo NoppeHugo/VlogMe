@@ -4,7 +4,9 @@ struct CameraScreen: View {
 
     @StateObject private var vm: CameraViewModel
     @Binding private var showPreview: Bool
-    @State private var showLibrary = false
+    @State private var showLibrary      = false
+    @State private var showReorder      = false
+    @State private var segmentToTrim: VideoSegment? = nil
 
     init(camera: CameraService, store: VlogStore, showPreview: Binding<Bool>) {
         _vm = StateObject(wrappedValue: CameraViewModel(camera: camera, store: store))
@@ -22,6 +24,12 @@ struct CameraScreen: View {
             )
             .ignoresSafeArea()
 
+            // Grille de composition
+            if vm.showGrid {
+                GridOverlayView()
+                    .transition(.opacity)
+            }
+
             VStack(spacing: 0) {
                 topBar
                 if let progress = vm.targetProgress {
@@ -35,20 +43,39 @@ struct CameraScreen: View {
                         segments: vm.segments,
                         urlFor: { vm.store.url(for: $0) },
                         onRedoLast: vm.redoLastSegment,
-                        onDeleteLast: vm.deleteLastSegment
+                        onDeleteLast: vm.deleteLastSegment,
+                        onTrim: { segmentToTrim = $0 },
+                        onReorder: { showReorder = true }
                     )
                     .padding(.bottom, 8)
                 }
                 bottomControls
             }
             .padding(.vertical, 12)
+
+            // Overlay compte à rebours
+            if let n = vm.countdown {
+                CountdownOverlayView(value: n)
+                    .transition(.opacity)
+            }
         }
         .statusBarHidden(true)
+        .animation(.easeInOut(duration: 0.2), value: vm.showGrid)
+        .animation(.easeInOut(duration: 0.15), value: vm.countdown)
         .onAppear { vm.onAppear() }
         .onDisappear { vm.onDisappear() }
         .sheet(isPresented: $showLibrary) {
             VlogLibraryScreen()
                 .environmentObject(vm.store)
+        }
+        .sheet(isPresented: $showReorder) {
+            SegmentReorderSheet()
+                .environmentObject(vm.store)
+        }
+        .sheet(item: $segmentToTrim) { seg in
+            TrimSheet(segment: seg, url: vm.store.url(for: seg)) { start, end in
+                vm.store.setSegmentTrim(seg.id, start: start, end: end)
+            }
         }
     }
 
@@ -56,10 +83,8 @@ struct CameraScreen: View {
 
     private var topBar: some View {
         HStack(spacing: 8) {
-            // Bibliothèque de vlogs
-            Button {
-                showLibrary = true
-            } label: {
+            // Bibliothèque
+            Button { showLibrary = true } label: {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "rectangle.stack")
                         .font(.subheadline.weight(.semibold))
@@ -67,7 +92,6 @@ struct CameraScreen: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(.black.opacity(0.45), in: Capsule())
-
                     if vm.draftCount > 1 {
                         Text("\(vm.draftCount)")
                             .font(.system(size: 9, weight: .bold))
@@ -80,9 +104,8 @@ struct CameraScreen: View {
             }
             .disabled(vm.controlsLocked)
             .opacity(vm.controlsLocked ? 0.35 : 1)
-            .accessibilityLabel("Bibliothèque de vlogs")
 
-            // Durée (+ restant si durée cible active)
+            // Durée
             VStack(alignment: .leading, spacing: 0) {
                 DurationLabel(seconds: vm.totalDuration, isRecording: vm.isRecording)
                 if let remaining = vm.remainingDuration {
@@ -95,6 +118,29 @@ struct CameraScreen: View {
 
             Spacer()
 
+            // Grille
+            Button { vm.showGrid.toggle() } label: {
+                Image(systemName: vm.showGrid ? "grid" : "grid")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(vm.showGrid ? Color.accentOrange : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
+            }
+
+            // Compte à rebours
+            Button { vm.countdownEnabled.toggle() } label: {
+                Text("3s")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(vm.countdownEnabled ? Color.accentOrange : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
+            }
+            .disabled(vm.controlsLocked)
+            .opacity(vm.controlsLocked ? 0.35 : 1)
+
+            // Torche
             if vm.facing == .back {
                 Button { vm.toggleTorch() } label: {
                     Image(systemName: vm.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
@@ -104,9 +150,9 @@ struct CameraScreen: View {
                         .padding(.vertical, 6)
                         .background(.black.opacity(0.45), in: Capsule())
                 }
-                .accessibilityLabel(vm.isTorchOn ? "Éteindre la lampe" : "Allumer la lampe")
             }
 
+            // Format
             Button { vm.toggleAspect() } label: {
                 Text(vm.aspectRatio.label)
                     .font(.subheadline.weight(.semibold).monospacedDigit())
@@ -117,19 +163,16 @@ struct CameraScreen: View {
             }
             .opacity(vm.controlsLocked ? 0.35 : 1)
             .disabled(vm.controlsLocked)
-            .accessibilityLabel("Changer le format vidéo")
         }
         .padding(.horizontal, 16)
     }
 
-    // MARK: - Barre de progression durée cible
+    // MARK: - Progress bar durée cible
 
     private func targetBar(progress: Double) -> some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(.white.opacity(0.12))
-                    .frame(height: 3)
+                Capsule().fill(.white.opacity(0.12)).frame(height: 3)
                 Capsule()
                     .fill(progress >= 1 ? Color.green : Color.accentOrange)
                     .frame(width: geo.size.width * progress, height: 3)
@@ -157,13 +200,11 @@ struct CameraScreen: View {
         }
     }
 
-    // MARK: - Zoom preset buttons (.5× / 1× / 2×)
+    // MARK: - Zoom preset buttons
 
     private var zoomPresetButtons: some View {
         HStack(spacing: 6) {
-            if vm.hasUltraWide {
-                zoomButton(.ultraWide)
-            }
+            if vm.hasUltraWide { zoomButton(.ultraWide) }
             zoomButton(.standard)
             zoomButton(.tele)
         }
@@ -172,22 +213,18 @@ struct CameraScreen: View {
 
     private func zoomButton(_ preset: ZoomPreset) -> some View {
         let selected = vm.zoomPreset == preset
-        return Button {
-            vm.setZoomPreset(preset)
-        } label: {
+        return Button { vm.setZoomPreset(preset) } label: {
             Text(preset.label)
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
                 .foregroundStyle(selected ? .black : .white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(
-                    selected ? Color.accentOrange : Color.black.opacity(0.45),
-                    in: Capsule()
-                )
+                .background(selected ? Color.accentOrange : Color.black.opacity(0.45), in: Capsule())
         }
         .disabled(vm.isRecording)
         .opacity(vm.isRecording ? 0.4 : 1)
         .animation(.easeInOut(duration: 0.15), value: selected)
+        .sensoryFeedback(.selection, trigger: selected)
     }
 
     // MARK: - Bottom controls
@@ -205,7 +242,7 @@ struct CameraScreen: View {
 
             Spacer()
 
-            RecordButton(isRecording: vm.isRecording, action: vm.toggleRecording)
+            RecordButton(isRecording: vm.isRecording || vm.countdown != nil, action: vm.toggleRecording)
 
             Spacer()
 
@@ -225,12 +262,7 @@ struct CameraScreen: View {
         .padding(.horizontal, 24)
     }
 
-    private func controlButton(
-        systemImage: String,
-        label: String,
-        disabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
+    private func controlButton(systemImage: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.title2)

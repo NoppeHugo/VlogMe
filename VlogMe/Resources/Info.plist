@@ -22,6 +22,8 @@
 	<string>VlogMe enregistre le son de tes vlogs.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Pour enregistrer ta vidéo finale dans ta pellicule.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>VlogMe accède à ta bibliothèque musicale pour ajouter une musique de fond à ton vlog.</string>
 
 	<!-- App principalement portrait (vertical 9:16 par défaut). -->
 	<key>UISupportedInterfaceOrientations</key>

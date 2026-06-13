@@ -9,6 +9,7 @@ struct ExportSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var baseThumb: UIImage? = nil
+    @State private var showMusicPicker = false
 
     init(store: VlogStore, entitlements: Entitlements) {
         _vm = StateObject(wrappedValue: ExportViewModel(store: store, entitlements: entitlements))
@@ -22,6 +23,14 @@ struct ExportSheet: View {
         .task { await loadThumbnail() }
         .sheet(isPresented: $vm.showShareSheet) {
             if let url = vm.exportedURL { ShareSheet(items: [url]) }
+        }
+        .sheet(isPresented: $showMusicPicker) {
+            MusicPickerView { pickedURL in
+                showMusicPicker = false
+                if let pickedURL {
+                    vm.setMusic(url: pickedURL, volume: vm.musicVolume)
+                }
+            }
         }
     }
 
@@ -82,6 +91,54 @@ struct ExportSheet: View {
                     }
                 }
                 .tint(Color.accentOrange)
+            }
+
+            // Musique de fond
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Musique de fond")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+
+                if let musicURL = vm.musicURL {
+                    HStack(spacing: 10) {
+                        Image(systemName: "music.note")
+                            .foregroundStyle(Color.accentOrange)
+                        Text(musicURL.deletingPathExtension().lastPathComponent)
+                            .font(.subheadline)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Spacer()
+                        Button { vm.removeMusic() } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+
+                    HStack {
+                        Image(systemName: "speaker.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.4))
+                        Slider(value: $vm.musicVolume, in: 0...1) { _ in
+                            vm.setMusic(url: musicURL, volume: vm.musicVolume)
+                        }
+                        .tint(Color.accentOrange)
+                        Image(systemName: "speaker.wave.3.fill")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                } else {
+                    Button { showMusicPicker = true } label: {
+                        Label("Choisir une musique", systemImage: "music.note")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
             }
 
             Spacer()
@@ -150,6 +207,42 @@ struct ExportSheet: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.white)
+
+                HStack(spacing: 12) {
+                    Button { vm.shareToInstagram() } label: {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "camera")
+                            Text("Instagram")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(
+                            LinearGradient(
+                                colors: [Color(red: 0.83, green: 0.18, blue: 0.53), Color(red: 0.99, green: 0.45, blue: 0.24)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                        .foregroundStyle(.white)
+                    }
+
+                    Button { vm.shareToTikTok() } label: {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "music.note")
+                            Text("TikTok")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(Color.black, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.15), lineWidth: 1))
+                        .foregroundStyle(.white)
+                    }
+                }
             }
             .controlSize(.large)
 

@@ -12,11 +12,16 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var elapsedInCurrentSegment: Double = 0
     @Published private(set) var zoomFactor: CGFloat = 1.0
     @Published private(set) var isSwitchingCamera = false
+    @Published private(set) var countdown: Int? = nil
+    @Published var showGrid = false
+    @Published var countdownEnabled = false
 
     private var cancellables = Set<AnyCancellable>()
     private var timer: AnyCancellable?
+    private var maxDurationTimer: AnyCancellable?
     private var segmentStart: Date?
     private var pendingCameraFlip = false
+    private var countdownTask: Task<Void, Never>? = nil
 
     private let impactHeavy  = UIImpactFeedbackGenerator(style: .heavy)
     private let impactMedium = UIImpactFeedbackGenerator(style: .medium)
@@ -103,18 +108,42 @@ final class CameraViewModel: ObservableObject {
     // MARK: - Actions
 
     func toggleRecording() {
-        if camera.isRecording {
-            stopTimer()
-            camera.stopRecording()
-            impactMedium.impactOccurred()
-            impactMedium.prepare()
+        if camera.isRecording || countdown != nil {
+            // Arrêt (annule aussi le compte à rebours en cours)
+            countdownTask?.cancel()
+            countdownTask = nil
+            countdown = nil
+            if camera.isRecording {
+                stopTimer()
+                camera.stopRecording()
+                impactMedium.impactOccurred()
+                impactMedium.prepare()
+            }
+        } else if countdownEnabled {
+            countdownTask = Task { await runCountdownThenRecord() }
         } else {
-            let url = store.newSegmentURL()
-            camera.startRecording(to: url)
-            startTimer()
-            impactHeavy.impactOccurred()
-            impactHeavy.prepare()
+            startRecordingNow()
         }
+    }
+
+    private func runCountdownThenRecord() async {
+        for n in stride(from: 3, through: 1, by: -1) {
+            guard !Task.isCancelled else { return }
+            countdown = n
+            impactLight.impactOccurred()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        guard !Task.isCancelled else { countdown = nil; return }
+        countdown = nil
+        startRecordingNow()
+    }
+
+    private func startRecordingNow() {
+        let url = store.newSegmentURL()
+        camera.startRecording(to: url)
+        startTimer()
+        impactHeavy.impactOccurred()
+        impactHeavy.prepare()
     }
 
     func switchCamera() {
@@ -199,11 +228,26 @@ final class CameraViewModel: ObservableObject {
                 guard let self, let start = self.segmentStart else { return }
                 self.elapsedInCurrentSegment = Date().timeIntervalSince(start)
             }
+        // Auto-stop si durée max définie
+        if let maxDur = store.maxSegmentDuration {
+            maxDurationTimer = Timer.publish(every: maxDur, on: .main, in: .common)
+                .autoconnect()
+                .prefix(1)
+                .sink { [weak self] _ in
+                    guard let self, self.camera.isRecording else { return }
+                    self.stopTimer()
+                    self.camera.stopRecording()
+                    self.impactMedium.impactOccurred()
+                    self.impactMedium.prepare()
+                }
+        }
     }
 
     private func stopTimer() {
         timer?.cancel()
         timer = nil
+        maxDurationTimer?.cancel()
+        maxDurationTimer = nil
         segmentStart = nil
     }
 }

@@ -30,6 +30,7 @@ struct Exporter {
     static func export(
         composition: AVComposition,
         videoComposition: AVVideoComposition,
+        audioMix: AVAudioMix? = nil,
         filterPreset: FilterPreset = .none,
         onProgress: @escaping (Double) -> Void
     ) async throws -> URL {
@@ -46,9 +47,10 @@ struct Exporter {
             presetName: AVAssetExportPresetHighestQuality
         ) else { throw ExportError.cannotCreateSession }
 
-        session.outputURL       = tempURL
-        session.outputFileType  = .mp4
+        session.outputURL        = tempURL
+        session.outputFileType   = .mp4
         session.videoComposition = videoComposition
+        session.audioMix         = audioMix
         session.shouldOptimizeForNetworkUse = true
 
         let pollTask = Task {

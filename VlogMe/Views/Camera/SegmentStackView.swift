@@ -6,6 +6,8 @@ struct SegmentStackView: View {
     let urlFor: (VideoSegment) -> URL
     let onRedoLast: () -> Void
     let onDeleteLast: () -> Void
+    let onTrim: (VideoSegment) -> Void
+    let onReorder: () -> Void
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -16,12 +18,22 @@ struct SegmentStackView: View {
                         SegmentThumbnailView(
                             url: urlFor(segment),
                             index: index + 1,
-                            duration: segment.durationSeconds,
+                            duration: segment.effectiveDuration,
+                            isTrimmed: segment.trimStart != nil || segment.trimEnd != nil,
                             isLast: isLast
                         )
                         .id(segment.id)
                         .contextMenu {
+                            Button { onTrim(segment) } label: {
+                                Label("Rogner", systemImage: "scissors")
+                            }
+                            if segments.count > 1 {
+                                Button { onReorder() } label: {
+                                    Label("Réorganiser", systemImage: "arrow.up.arrow.down")
+                                }
+                            }
                             if isLast {
+                                Divider()
                                 Button { onRedoLast() } label: {
                                     Label("Refaire", systemImage: "arrow.counterclockwise")
                                 }
@@ -48,6 +60,7 @@ private struct SegmentThumbnailView: View {
     let url: URL
     let index: Int
     let duration: Double
+    let isTrimmed: Bool
     let isLast: Bool
 
     @State private var image: UIImage?
@@ -81,12 +94,19 @@ private struct SegmentThumbnailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.35), radius: 4, x: 0, y: 2)
         .overlay(alignment: .topLeading) {
-            Text("\(index)")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(3)
-                .background(.black.opacity(0.55), in: Capsule())
-                .padding(3)
+            HStack(spacing: 2) {
+                Text("\(index)")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                if isTrimmed {
+                    Image(systemName: "scissors")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(Color.accentOrange)
+                }
+            }
+            .padding(3)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(3)
         }
         .overlay(
             RoundedRectangle(cornerRadius: 12)

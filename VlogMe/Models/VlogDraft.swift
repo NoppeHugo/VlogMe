@@ -8,6 +8,9 @@ struct VlogDraft: Identifiable, Codable {
     var aspectRatio: AspectRatio
     var targetDuration: Double?
     var filterPreset: FilterPreset
+    var maxSegmentDuration: Double?      // Auto-coupe après X sec (nil = infini)
+    var backgroundMusicPath: String?     // Chemin relatif au dossier du draft
+    var backgroundMusicVolume: Float     // 0.0 – 1.0
 
     init(name: String = "") {
         id = UUID()
@@ -20,8 +23,11 @@ struct VlogDraft: Identifiable, Codable {
         aspectRatio = .vertical
         targetDuration = nil
         filterPreset = .none
+        maxSegmentDuration = nil
+        backgroundMusicPath = nil
+        backgroundMusicVolume = 0.3
     }
 
-    var totalDuration: Double { segments.reduce(0) { $0 + $1.durationSeconds } }
+    var totalDuration: Double { segments.reduce(0) { $0 + $1.effectiveDuration } }
     var hasSegments: Bool { !segments.isEmpty }
 }

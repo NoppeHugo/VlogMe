@@ -12,22 +12,25 @@ enum AssemblerError: LocalizedError {
     }
 }
 
-/// Concatène les segments en cuts secs et produit une composition lisible/exportable.
+// Représente un segment avec ses points de trim optionnels
+struct SegmentClip {
+    let url: URL
+    let trimStart: CMTime    // .zero = pas de trim début
+    let trimEnd: CMTime?     // nil = jusqu'à la fin
+}
+
 struct VideoAssembler {
 
-    /// - Parameters:
-    ///   - urls: les segments, dans l'ordre.
-    ///   - renderSize: la taille de rendu finale.
-    ///   - cutSilence: si `true`, les plages silencieuses sont retirées avant l'assemblage.
-    ///   - outroURL: clip de marque optionnel ajouté en fin (utilisateurs gratuits).
     static func build(
-        urls: [URL],
+        clips: [SegmentClip],
         renderSize: CGSize,
         cutSilence: Bool = false,
-        outroURL: URL? = nil
-    ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition) {
+        outroURL: URL? = nil,
+        musicURL: URL? = nil,
+        musicVolume: Float = 0.3
+    ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition, audioMix: AVMutableAudioMix?) {
 
-        guard !urls.isEmpty else { throw AssemblerError.noSegments }
+        guard !clips.isEmpty else { throw AssemblerError.noSegments }
 
         let composition = AVMutableComposition()
         guard let videoTrack = composition.addMutableTrack(
@@ -40,58 +43,39 @@ struct VideoAssembler {
             preferredTrackID: kCMPersistentTrackID_Invalid
         )
 
-        let allURLs = outroURL.map { urls + [$0] } ?? urls
-
         var cursor = CMTime.zero
         var instructions: [AVMutableVideoCompositionInstruction] = []
 
-        for url in allURLs {
-            let asset = AVURLAsset(url: url)
-            let duration = try await asset.load(.duration)
-
-            guard let assetVideoTrack = try await asset.loadTracks(withMediaType: .video).first else {
-                continue
-            }
-
-            let preferredTransform = try await assetVideoTrack.load(.preferredTransform)
-            let naturalSize        = try await assetVideoTrack.load(.naturalSize)
-            let transform = aspectFillTransform(
-                naturalSize: naturalSize,
-                preferredTransform: preferredTransform,
-                renderSize: renderSize
+        // Segments principaux
+        for clip in clips {
+            try await insertClip(
+                url: clip.url,
+                trimStart: clip.trimStart,
+                trimEnd: clip.trimEnd,
+                cutSilence: cutSilence,
+                isOutro: false,
+                videoTrack: videoTrack,
+                audioTrack: audioTrack,
+                renderSize: renderSize,
+                cursor: &cursor,
+                instructions: &instructions
             )
+        }
 
-            // Sous-plages à insérer (tout le segment, ou uniquement le non-silencieux)
-            let isOutro = outroURL.map { $0 == url } ?? false
-            let rangesToInsert: [CMTimeRange]
-            if cutSilence && !isOutro {
-                let nonSilent = await SilenceDetector.nonSilentRanges(in: url)
-                rangesToInsert = nonSilent.isEmpty
-                    ? [CMTimeRange(start: .zero, duration: duration)]
-                    : nonSilent
-            } else {
-                rangesToInsert = [CMTimeRange(start: .zero, duration: duration)]
-            }
-
-            let assetAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first
-
-            for range in rangesToInsert {
-                try videoTrack.insertTimeRange(range, of: assetVideoTrack, at: cursor)
-
-                if let audioTrack, let assetAudioTrack {
-                    try? audioTrack.insertTimeRange(range, of: assetAudioTrack, at: cursor)
-                }
-
-                let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
-                layerInstruction.setTransform(transform, at: cursor)
-
-                let instruction = AVMutableVideoCompositionInstruction()
-                instruction.timeRange = CMTimeRange(start: cursor, duration: range.duration)
-                instruction.layerInstructions = [layerInstruction]
-                instructions.append(instruction)
-
-                cursor = cursor + range.duration
-            }
+        // Outro optionnel (plein clip, sans trim ni silence)
+        if let outroURL {
+            try await insertClip(
+                url: outroURL,
+                trimStart: .zero,
+                trimEnd: nil,
+                cutSilence: false,
+                isOutro: true,
+                videoTrack: videoTrack,
+                audioTrack: audioTrack,
+                renderSize: renderSize,
+                cursor: &cursor,
+                instructions: &instructions
+            )
         }
 
         let videoComposition = AVMutableVideoComposition()
@@ -99,10 +83,120 @@ struct VideoAssembler {
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.instructions = instructions
 
-        return (composition, videoComposition)
+        // Musique de fond
+        let audioMix = try await addBackgroundMusic(
+            musicURL: musicURL,
+            volume: musicVolume,
+            videoDuration: cursor,
+            to: composition
+        )
+
+        return (composition, videoComposition, audioMix)
     }
 
-    /// Calcule la transform aspect-fill (centre la source dans `renderSize`).
+    // MARK: - Insert helpers
+
+    private static func insertClip(
+        url: URL,
+        trimStart: CMTime,
+        trimEnd: CMTime?,
+        cutSilence: Bool,
+        isOutro: Bool,
+        videoTrack: AVMutableCompositionTrack,
+        audioTrack: AVMutableCompositionTrack?,
+        renderSize: CGSize,
+        cursor: inout CMTime,
+        instructions: inout [AVMutableVideoCompositionInstruction]
+    ) async throws {
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration)
+        guard let assetVideoTrack = try await asset.loadTracks(withMediaType: .video).first else { return }
+
+        let preferredTransform = try await assetVideoTrack.load(.preferredTransform)
+        let naturalSize        = try await assetVideoTrack.load(.naturalSize)
+        let transform = aspectFillTransform(
+            naturalSize: naturalSize,
+            preferredTransform: preferredTransform,
+            renderSize: renderSize
+        )
+
+        // Plage effective après trim
+        let effectiveStart = trimStart
+        let effectiveEnd   = trimEnd ?? duration
+        let effectiveRange = CMTimeRange(start: effectiveStart, end: effectiveEnd)
+
+        // Sous-plages (coupe silence ou plage entière)
+        let rangesToInsert: [CMTimeRange]
+        if cutSilence && !isOutro {
+            let nonSilent = await SilenceDetector.nonSilentRanges(in: url)
+            // Intersectionner avec la plage trimmée
+            let trimmedNonSilent = nonSilent.compactMap { $0.intersection(effectiveRange) }
+            rangesToInsert = trimmedNonSilent.isEmpty
+                ? [effectiveRange]
+                : trimmedNonSilent
+        } else {
+            rangesToInsert = [effectiveRange]
+        }
+
+        let assetAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first
+
+        for range in rangesToInsert {
+            try videoTrack.insertTimeRange(range, of: assetVideoTrack, at: cursor)
+            if let audioTrack, let assetAudioTrack {
+                try? audioTrack.insertTimeRange(range, of: assetAudioTrack, at: cursor)
+            }
+
+            let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
+            layerInstruction.setTransform(transform, at: cursor)
+
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: cursor, duration: range.duration)
+            instruction.layerInstructions = [layerInstruction]
+            instructions.append(instruction)
+
+            cursor = cursor + range.duration
+        }
+    }
+
+    private static func addBackgroundMusic(
+        musicURL: URL?,
+        volume: Float,
+        videoDuration: CMTime,
+        to composition: AVMutableComposition
+    ) async throws -> AVMutableAudioMix? {
+        guard let musicURL, videoDuration > .zero else { return nil }
+        let musicAsset = AVURLAsset(url: musicURL)
+        guard let musicAudioTrack = try? await musicAsset.loadTracks(withMediaType: .audio).first else { return nil }
+        guard let track = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else { return nil }
+
+        let musicDuration  = (try? await musicAsset.load(.duration)) ?? .zero
+        let insertDuration = CMTimeMinimum(musicDuration, videoDuration)
+        guard insertDuration > .zero else { return nil }
+
+        try? track.insertTimeRange(
+            CMTimeRange(start: .zero, duration: insertDuration),
+            of: musicAudioTrack,
+            at: .zero
+        )
+
+        // Fade out sur les 2 dernières secondes
+        let fadeStart = CMTimeSubtract(insertDuration, CMTime(seconds: 2, preferredTimescale: 600))
+        let params = AVMutableAudioMixInputParameters(track: track)
+        params.setVolume(volume, at: .zero)
+        if fadeStart > .zero {
+            params.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0, timeRange: CMTimeRange(start: fadeStart, duration: CMTime(seconds: 2, preferredTimescale: 600)))
+        }
+
+        let audioMix = AVMutableAudioMix()
+        audioMix.inputParameters = [params]
+        return audioMix
+    }
+
+    // MARK: - Transform
+
     private static func aspectFillTransform(
         naturalSize: CGSize,
         preferredTransform: CGAffineTransform,
@@ -110,14 +204,10 @@ struct VideoAssembler {
     ) -> CGAffineTransform {
         let displayedRect = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
         let displaySize = CGSize(width: abs(displayedRect.width), height: abs(displayedRect.height))
-
         guard displaySize.width > 0, displaySize.height > 0 else { return preferredTransform }
-
-        let scale = max(renderSize.width / displaySize.width,
-                        renderSize.height / displaySize.height)
+        let scale = max(renderSize.width / displaySize.width, renderSize.height / displaySize.height)
         let tx = (renderSize.width  - displaySize.width  * scale) / 2
         let ty = (renderSize.height - displaySize.height * scale) / 2
-
         return preferredTransform
             .concatenating(CGAffineTransform(scaleX: scale, y: scale))
             .concatenating(CGAffineTransform(translationX: tx, y: ty))

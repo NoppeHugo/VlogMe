@@ -167,6 +167,41 @@ final class VlogStore: ObservableObject {
         save()
     }
 
+    func setSegmentTrim(_ id: UUID, start: Double, end: Double?) {
+        guard let draftIdx = drafts.firstIndex(where: { $0.id == activeId }),
+              let segIdx = drafts[draftIdx].segments.firstIndex(where: { $0.id == id }) else { return }
+        drafts[draftIdx].segments[segIdx].trimStart = start
+        drafts[draftIdx].segments[segIdx].trimEnd   = end
+        syncProxy()
+        save()
+    }
+
+    func moveSegment(from source: IndexSet, to destination: Int) {
+        updateActive { $0.segments.move(fromOffsets: source, toOffset: destination) }
+        syncProxy()
+        save()
+    }
+
+    func setMaxSegmentDuration(_ duration: Double?, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].maxSegmentDuration = duration
+        save()
+    }
+
+    func setBackgroundMusic(path: String?, volume: Float = 0.3, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].backgroundMusicPath = path
+        drafts[idx].backgroundMusicVolume = volume
+        save()
+    }
+
+    func backgroundMusicURL() -> URL? {
+        guard let path = activeDraft?.backgroundMusicPath else { return nil }
+        return segmentsDirectory.appendingPathComponent(path)
+    }
+
     /// Met à jour la durée cible. Si `draftId` est fourni, modifie ce brouillon spécifique ;
     /// sinon met à jour le brouillon actif.
     func updateTargetDuration(_ duration: Double?, for draftId: UUID? = nil) {
