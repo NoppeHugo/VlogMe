@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Liste des brouillons de vlogs — thème clair (DA §1).
 struct VlogLibraryScreen: View {
 
     @EnvironmentObject private var store: VlogStore
@@ -11,26 +10,40 @@ struct VlogLibraryScreen: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .bottom) {
                 Color.cardBackground.ignoresSafeArea()
-                if store.drafts.isEmpty { emptyState } else { draftList }
+
+                Group {
+                    if store.drafts.isEmpty { emptyState } else { draftGrid }
+                }
+
+                // Floating action button
+                Button {
+                    store.createDraft()
+                    dismiss()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .fontWeight(.bold)
+                        Text("Nouveau vlog")
+                            .fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 14)
+                    .background(Color.accentOrange, in: Capsule())
+                    .shadow(color: Color.accentOrange.opacity(0.35), radius: 14, y: 6)
+                }
+                .padding(.bottom, 36)
+                .sensoryFeedback(.impact(weight: .light), trigger: store.drafts.count)
             }
             .navigationTitle("Mes vlogs")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Fermer") { dismiss() }
                         .foregroundStyle(Color.textSecondary)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        store.createDraft()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "plus")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(Color.accentOrange)
                 }
             }
             .toolbarBackground(Color.cardBackground, for: .navigationBar)
@@ -52,90 +65,65 @@ struct VlogLibraryScreen: View {
         }
     }
 
-    // MARK: - Liste
+    // MARK: - Grille de cards
 
-    private var draftList: some View {
-        List {
-            ForEach(store.drafts) { draft in
-                DraftRow(
-                    draft: draft,
-                    isActive: draft.id == store.activeId,
-                    isDefault: draft.id == store.defaultId,
-                    onTargetChanged: { store.updateTargetDuration($0, for: draft.id) }
-                )
-                .listRowBackground(Color.white)
-                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                .listRowSeparator(.hidden)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    store.activateDraft(draft.id)
-                    dismiss()
-                }
-                .contextMenu {
-                    Button {
+    private var draftGrid: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(store.drafts) { draft in
+                    DraftCard(
+                        draft: draft,
+                        isActive: draft.id == store.activeId,
+                        isDefault: draft.id == store.defaultId,
+                        onTargetChanged: { store.updateTargetDuration($0, for: draft.id) },
+                        onRename: { newName = draft.name; draftToRename = draft },
+                        onSetDefault: { store.setDefault(draft.id) },
+                        onDelete: { store.deleteDraft(draft.id) }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
                         store.activateDraft(draft.id)
                         dismiss()
-                    } label: { Label("Ouvrir", systemImage: "camera.fill") }
-
-                    Button {
-                        store.setDefault(draft.id)
-                    } label: {
-                        Label(
-                            draft.id == store.defaultId ? "Par défaut ✓" : "Définir par défaut",
-                            systemImage: "star"
-                        )
                     }
-
-                    Button {
-                        newName = draft.name
-                        draftToRename = draft
-                    } label: { Label("Renommer", systemImage: "pencil") }
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        store.deleteDraft(draft.id)
-                    } label: { Label("Supprimer", systemImage: "trash") }
                 }
             }
-            .onDelete { indexSet in
-                indexSet.forEach { store.deleteDraft(store.drafts[$0].id) }
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 110)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.cardBackground)
     }
 
     // MARK: - État vide
 
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "rectangle.stack")
-                .font(.system(size: 52, weight: .light))
-                .foregroundStyle(Color.textSecondary)
+        VStack(spacing: 16) {
+            Image(systemName: "video.badge.plus")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(Color.accentOrange.opacity(0.6))
             Text("Aucun vlog")
-                .font(.headline)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.textPrimary)
+            Text("Crée ton premier vlog pour commencer.")
+                .font(.subheadline)
                 .foregroundStyle(Color.textSecondary)
-            Button {
-                store.createDraft()
-                dismiss()
-            } label: {
-                Text("Nouveau vlog")
-            }
-            .buttonStyle(OrangeButton())
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 80)
     }
 }
 
-// MARK: - Ligne brouillon
+// MARK: - Card brouillon
 
-private struct DraftRow: View {
+private struct DraftCard: View {
 
     let draft: VlogDraft
     let isActive: Bool
     let isDefault: Bool
     let onTargetChanged: (Double?) -> Void
+    let onRename: () -> Void
+    let onSetDefault: () -> Void
+    let onDelete: () -> Void
 
     @State private var showTargetPicker = false
 
@@ -145,75 +133,134 @@ private struct DraftRow: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 0) {
-                // Indicateur actif
-                Rectangle()
-                    .fill(isActive ? Color.accentOrange : Color.clear)
-                    .frame(width: 3)
+        VStack(alignment: .leading, spacing: 14) {
 
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 6) {
-                            if isDefault {
-                                Image(systemName: "star.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(Color.accentOrange)
-                            }
-                            Text(draft.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Color.textPrimary)
+            // — Ligne titre + badge actif
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        if isDefault {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(Color.accentOrange)
                         }
-
-                        HStack(spacing: 6) {
-                            Text(relativeDate(draft.createdAt))
-                            Text("·")
-                            Text("\(draft.segments.count) clip\(draft.segments.count == 1 ? "" : "s")")
-                            if draft.hasSegments {
-                                Text("·")
-                                Text(formatDuration(draft.totalDuration))
-                                    .monospacedDigit()
-                            }
-                        }
+                        Text(draft.name.isEmpty ? "Sans titre" : draft.name)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(Color.textPrimary)
+                            .lineLimit(1)
+                    }
+                    Text(relativeDate(draft.createdAt))
                         .font(.caption)
                         .foregroundStyle(Color.textSecondary)
-                    }
-
-                    Spacer()
-
-                    // Durée cible
-                    Button { showTargetPicker = true } label: {
-                        Group {
-                            if let t = draft.targetDuration {
-                                Text("/ \(formatDuration(t))")
-                                    .font(.caption.monospacedDigit().weight(.semibold))
-                                    .foregroundStyle(Color.accentOrange)
-                            } else {
-                                Image(systemName: "scope")
-                                    .font(.caption)
-                                    .foregroundStyle(Color.textSecondary)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.borderColor, in: Capsule())
-                    }
-                    .confirmationDialog("Durée cible", isPresented: $showTargetPicker) {
-                        ForEach(DraftRow.targets, id: \.label) { opt in
-                            Button(opt.label) { onTargetChanged(opt.value) }
-                        }
-                        Button("Annuler", role: .cancel) {}
-                    }
-                    .padding(.trailing, 16)
                 }
-                .padding(.vertical, 14)
-                .padding(.leading, 12)
+
+                Spacer()
+
+                if isActive {
+                    Text("EN COURS")
+                        .font(.system(size: 9, weight: .black))
+                        .tracking(0.5)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.accentOrange, in: Capsule())
+                }
             }
 
-            Divider()
-                .background(Color.borderColor)
-                .padding(.leading, 15)
+            // — Badges clips + durée + durée cible
+            HStack(spacing: 6) {
+                metaBadge(
+                    icon: "film.stack",
+                    text: "\(draft.segments.count) clip\(draft.segments.count == 1 ? "" : "s")"
+                )
+                if draft.hasSegments {
+                    metaBadge(icon: "clock", text: formatDuration(draft.totalDuration))
+                }
+                Spacer()
+
+                // Bouton durée cible
+                Button { showTargetPicker = true } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "scope")
+                            .font(.caption2)
+                        Text(draft.targetDuration.map { "/ \(formatDuration($0))" } ?? "Cible")
+                            .font(.caption.weight(.semibold).monospacedDigit())
+                    }
+                    .foregroundStyle(draft.targetDuration != nil ? Color.accentOrange : Color.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        draft.targetDuration != nil
+                            ? Color.accentOrange.opacity(0.1)
+                            : Color.borderColor,
+                        in: Capsule()
+                    )
+                }
+                .confirmationDialog("Durée cible", isPresented: $showTargetPicker) {
+                    ForEach(DraftCard.targets, id: \.label) { opt in
+                        Button(opt.label) { onTargetChanged(opt.value) }
+                    }
+                    Button("Annuler", role: .cancel) {}
+                }
+            }
+
+            // — Barre de progression (si durée cible définie)
+            if let target = draft.targetDuration, draft.hasSegments {
+                let progress = min(1.0, draft.totalDuration / target)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.borderColor).frame(height: 3)
+                        Capsule()
+                            .fill(progress >= 1 ? Color.green : Color.accentOrange)
+                            .frame(width: geo.size.width * progress, height: 3)
+                    }
+                }
+                .frame(height: 3)
+            }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color.white)
+                .shadow(
+                    color: isActive ? Color.accentOrange.opacity(0.18) : .black.opacity(0.07),
+                    radius: isActive ? 12 : 6,
+                    y: 3
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(isActive ? Color.accentOrange.opacity(0.5) : Color.clear, lineWidth: 1.5)
+        )
+        .animation(.easeInOut(duration: 0.2), value: isActive)
+        .contextMenu {
+            Button { onRename() } label: {
+                Label("Renommer", systemImage: "pencil")
+            }
+            Button { onSetDefault() } label: {
+                Label(
+                    isDefault ? "Par défaut ✓" : "Définir par défaut",
+                    systemImage: "star"
+                )
+            }
+            Divider()
+            Button(role: .destructive) { onDelete() } label: {
+                Label("Supprimer", systemImage: "trash")
+            }
+        }
+    }
+
+    private func metaBadge(icon: String, text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(Color.textSecondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.borderColor, in: Capsule())
     }
 
     private func formatDuration(_ s: Double) -> String {
@@ -223,7 +270,7 @@ private struct DraftRow: View {
 
     private func relativeDate(_ date: Date) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(date) { return "Aujourd'hui" }
+        if cal.isDateInToday(date)     { return "Aujourd'hui" }
         if cal.isDateInYesterday(date) { return "Hier" }
         let f = DateFormatter()
         f.dateFormat = "d MMM"

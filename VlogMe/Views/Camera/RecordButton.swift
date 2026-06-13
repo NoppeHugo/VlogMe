@@ -44,5 +44,7 @@ struct RecordButton: View {
         .frame(width: 96, height: 96)
         .accessibilityLabel(isRecording ? "Couper le segment" : "Démarrer un segment")
         .onChange(of: isRecording) { _, _ in pulsing = false }
+        .sensoryFeedback(.impact(weight: .heavy, intensity: 1.0), trigger: isRecording) { _, new in new }
+        .sensoryFeedback(.impact(weight: .medium, intensity: 0.8), trigger: isRecording) { old, _ in old }
     }
 }

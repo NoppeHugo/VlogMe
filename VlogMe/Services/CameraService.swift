@@ -162,7 +162,7 @@ final class CameraService: NSObject, ObservableObject {
         sessionQueue.async { [weak self] in
             guard let self else { return }
             let factor = self.presetFactors[preset] ?? 1.0
-            self.applyZoom(factor)
+            self.applyZoom(factor, animated: true)
             self.publish { self.zoomPreset = preset }
         }
     }
@@ -172,16 +172,21 @@ final class CameraService: NSObject, ObservableObject {
     func setZoom(_ factor: CGFloat) {
         sessionQueue.async { [weak self] in
             guard let self else { return }
-            self.applyZoom(factor)
+            self.applyZoom(factor, animated: false)
         }
     }
 
-    private func applyZoom(_ factor: CGFloat) {
+    private func applyZoom(_ factor: CGFloat, animated: Bool) {
         guard let device = videoInput?.device else { return }
         try? device.lockForConfiguration()
-        let lo  = device.minAvailableVideoZoomFactor
-        let hi  = min(device.activeFormat.videoMaxZoomFactor, 10.0)
-        device.videoZoomFactor = max(lo, min(factor, hi))
+        let lo      = device.minAvailableVideoZoomFactor
+        let hi      = min(device.activeFormat.videoMaxZoomFactor, 10.0)
+        let clamped = max(lo, min(factor, hi))
+        if animated {
+            device.ramp(toVideoZoomFactor: clamped, withRate: 6.0)
+        } else {
+            device.videoZoomFactor = clamped
+        }
         device.unlockForConfiguration()
     }
 
