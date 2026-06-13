@@ -40,6 +40,8 @@ struct RecordButton: View {
             }
         }
         .buttonStyle(.plain)
+        .contentShape(Circle().size(CGSize(width: 96, height: 96)))
+        .frame(width: 96, height: 96)
         .accessibilityLabel(isRecording ? "Couper le segment" : "Démarrer un segment")
         .onChange(of: isRecording) { _, _ in pulsing = false }
     }
