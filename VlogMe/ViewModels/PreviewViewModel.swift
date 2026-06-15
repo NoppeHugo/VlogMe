@@ -23,15 +23,20 @@ final class PreviewViewModel: ObservableObject {
     /// Assemble les segments et prépare un lecteur sur la composition (sans ré-encodage).
     func build() async {
         state = .loading
-        let urls = store.segments.map { store.url(for: $0) }
-        guard !urls.isEmpty else {
+        let clips = store.segments.map { seg in
+            SegmentClip(
+                url: store.url(for: seg),
+                trimStart: CMTime(seconds: seg.trimStart ?? 0, preferredTimescale: 600),
+                trimEnd: seg.trimEnd.map { CMTime(seconds: $0, preferredTimescale: 600) }
+            )
+        }
+        guard !clips.isEmpty else {
             state = .failed("Aucun segment à prévisualiser.")
             return
         }
         do {
-            // La prévisualisation joue les segments à 1080p, sans outro (WYSIWYG du tournage).
-            let (composition, videoComposition) = try await VideoAssembler.build(
-                urls: urls,
+            let (composition, videoComposition, _) = try await VideoAssembler.build(
+                clips: clips,
                 renderSize: store.aspectRatio.renderSize
             )
             let item = AVPlayerItem(asset: composition)
