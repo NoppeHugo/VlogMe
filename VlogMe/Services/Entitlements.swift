@@ -1,4 +1,4 @@
-import Foundation
+import StoreKit
 import Combine
 
 enum ExportResolution {
@@ -20,14 +20,98 @@ enum ExportResolution {
     }
 }
 
-/// Accès aux fonctionnalités — tout débloqué pour les tests.
-/// Pour brancher RevenueCat plus tard : `isPro = customerInfo.entitlements["pro"]?.isActive ?? false`
 @MainActor
 final class Entitlements: ObservableObject {
 
-    @Published var isPro: Bool = true
+    static let monthlyID         = "com.hugonoppe.vlogme.pro.monthly"
+    static let annualID          = "com.hugonoppe.vlogme.pro.annual"
+    static let freeDurationLimit: Double = 120 // 2 minutes
+
+    @Published private(set) var isPro: Bool = false
+    @Published private(set) var products: [Product] = []
+    @Published private(set) var isLoadingProducts: Bool = false
+    @Published var purchaseError: String?
+
+    private var updateTask: Task<Void, Never>?
+
+    init() {
+        updateTask = listenForTransactions()
+        Task { await refreshStatus() }
+    }
+
+    deinit { updateTask?.cancel() }
+
+    // MARK: - Computed capabilities
 
     var exportResolution: ExportResolution { isPro ? .uhd4K : .hd1080 }
     var includesOutro: Bool { false }
-    var maxVlogDuration: Double? { nil }
+    var maxVlogDuration: Double? { isPro ? nil : Self.freeDurationLimit }
+
+    var monthly: Product? { products.first { $0.id == Self.monthlyID } }
+    var annual: Product?  { products.first { $0.id == Self.annualID } }
+
+    var savingsPercent: Int? {
+        guard let m = monthly, let a = annual, m.price > 0 else { return nil }
+        let annualMonthly = a.price / 12
+        let savings = (1 - annualMonthly / m.price) * 100
+        return max(0, Int(truncating: savings as NSDecimalNumber))
+    }
+
+    // MARK: - StoreKit
+
+    func loadProducts() async {
+        guard products.isEmpty else { return }
+        isLoadingProducts = true
+        do {
+            let loaded = try await Product.products(for: [Self.monthlyID, Self.annualID])
+            products = loaded.sorted { $0.price < $1.price }
+        } catch {
+            // Unavailable in dev — fail silently
+        }
+        isLoadingProducts = false
+    }
+
+    func purchase(_ product: Product) async {
+        do {
+            let result = try await product.purchase()
+            if case .success(let verification) = result,
+               case .verified(let transaction) = verification {
+                await transaction.finish()
+                await refreshStatus()
+            }
+        } catch {
+            purchaseError = error.localizedDescription
+        }
+    }
+
+    func restorePurchases() async {
+        do {
+            try await AppStore.sync()
+            await refreshStatus()
+        } catch {
+            purchaseError = error.localizedDescription
+        }
+    }
+
+    func refreshStatus() async {
+        var hasPro = false
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let tx) = result,
+               tx.productID == Self.monthlyID || tx.productID == Self.annualID {
+                hasPro = true
+            }
+        }
+        isPro = hasPro
+    }
+
+    private func listenForTransactions() -> Task<Void, Never> {
+        Task(priority: .background) { [weak self] in
+            for await result in Transaction.updates {
+                if case .verified(let tx) = result {
+                    await tx.finish()
+                    await self?.refreshStatus()
+                }
+            }
+        }
+    }
 }

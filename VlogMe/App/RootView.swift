@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Navigation de la coque : Caméra → Prévisualisation (cf. §1 — trois écrans, pas un de plus).
 struct RootView: View {
 
     @EnvironmentObject private var store: VlogStore
@@ -8,19 +7,29 @@ struct RootView: View {
     @EnvironmentObject private var permissions: PermissionsManager
 
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showPreview = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if permissions.allGranted {
-                    CameraScreen(camera: camera, store: store, showPreview: $showPreview)
-                } else {
-                    PermissionGateView()
+        Group {
+            if !hasSeenOnboarding {
+                OnboardingView {
+                    hasSeenOnboarding = true
                 }
-            }
-            .navigationDestination(isPresented: $showPreview) {
-                PreviewScreen(store: store)
+                .environmentObject(permissions)
+            } else {
+                NavigationStack {
+                    Group {
+                        if permissions.allGranted {
+                            CameraScreen(camera: camera, store: store, showPreview: $showPreview)
+                        } else {
+                            PermissionGateView()
+                        }
+                    }
+                    .navigationDestination(isPresented: $showPreview) {
+                        PreviewScreen(store: store)
+                    }
+                }
             }
         }
         .task { permissions.refresh() }

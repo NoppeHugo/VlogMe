@@ -25,6 +25,12 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
+    entitlements:
+      path: VlogMe/Resources/VlogMe.entitlements
+      properties:
+        com.apple.developer.in-app-payments:
+          - com.hugonoppe.vlogme.pro.monthly
+          - com.hugonoppe.vlogme.pro.annual
   VlogMeWidgetExtension:
     type: app-extension
     platform: iOS
