@@ -8,6 +8,11 @@ struct VlogMeApp: App {
     @StateObject private var permissions = PermissionsManager()
     @StateObject private var entitlements = Entitlements()
 
+    init() {
+        Analytics.configure()
+        Analytics.track(.appOpened)
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

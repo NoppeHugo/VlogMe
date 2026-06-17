@@ -15,6 +15,12 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 
+	<!-- Analytics PostHog — renseigne ta clé projet (laisse vide pour désactiver). -->
+	<key>POSTHOG_API_KEY</key>
+	<string></string>
+	<key>POSTHOG_HOST</key>
+	<string>https://eu.i.posthog.com</string>
+
 	<!-- Permissions (cf. §6.4) — textes clairs, lus par la review Apple. -->
 	<key>NSCameraUsageDescription</key>
 	<string>VlogMe utilise la caméra pour filmer tes vlogs.</string>
@@ -43,10 +49,21 @@
 		</dict>
 	</array>
 
+	<!-- Schémas externes interrogés via canOpenURL (partage direct). -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram</string>
+		<string>instagram-reels</string>
+		<string>instagram-stories</string>
+		<string>tiktok</string>
+		<string>snapchat</string>
+	</array>
+
+	<!-- Écran de lancement : fond blanc (le branding animé est dessiné en SwiftUI). -->
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
-		<string></string>
+		<string>LaunchBackground</string>
 	</dict>
 </dict>
 </plist>

@@ -12,6 +12,11 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     GENERATE_INFOPLIST_FILE: NO
 
+packages:
+  PostHog:
+    url: https://github.com/PostHog/posthog-ios
+    from: "3.0.0"
+
 targets:
   VlogMe:
     type: application
@@ -25,6 +30,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
+    dependencies:
+      - package: PostHog
     entitlements:
       path: VlogMe/Resources/VlogMe.entitlements
       properties:

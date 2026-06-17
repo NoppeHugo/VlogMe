@@ -78,6 +78,10 @@ final class Entitlements: ObservableObject {
                case .verified(let transaction) = verification {
                 await transaction.finish()
                 await refreshStatus()
+                Analytics.track(.purchaseCompleted, [
+                    "product_id": product.id,
+                    "price": (product.price as NSDecimalNumber).doubleValue
+                ])
             }
         } catch {
             purchaseError = error.localizedDescription
@@ -88,6 +92,7 @@ final class Entitlements: ObservableObject {
         do {
             try await AppStore.sync()
             await refreshStatus()
+            Analytics.track(.purchaseRestored, ["is_pro": isPro])
         } catch {
             purchaseError = error.localizedDescription
         }
@@ -102,6 +107,7 @@ final class Entitlements: ObservableObject {
             }
         }
         isPro = hasPro
+        Analytics.setPro(hasPro)
     }
 
     private func listenForTransactions() -> Task<Void, Never> {

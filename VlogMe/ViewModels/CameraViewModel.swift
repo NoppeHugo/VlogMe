@@ -144,6 +144,7 @@ final class CameraViewModel: ObservableObject {
         startTimer()
         impactHeavy.impactOccurred()
         impactHeavy.prepare()
+        Analytics.track(.recordingStarted, ["segment_index": segments.count])
     }
 
     func switchCamera() {

@@ -34,6 +34,7 @@ final class ExportViewModel: ObservableObject {
     }
 
     var resolutionLabel: String { entitlements.exportResolution.label }
+    var isPro: Bool { entitlements.isPro }
 
     var exportedURL: URL? {
         if case .ready(let url) = state { return url }
@@ -106,6 +107,13 @@ final class ExportViewModel: ObservableObject {
             }
             state = .ready(output)
             notif.notificationOccurred(.success)
+            Analytics.track(.vlogExported, [
+                "segment_count": clips.count,
+                "resolution": entitlements.exportResolution.label,
+                "filter": filterPreset.label,
+                "cut_silence": cutSilence,
+                "has_music": musicURL != nil
+            ])
         } catch {
             state = .failed(error.localizedDescription)
             notif.notificationOccurred(.error)
@@ -120,6 +128,7 @@ final class ExportViewModel: ObservableObject {
             try await PhotoSaver.save(url)
             saveMessage = "Enregistré dans Photos ✓"
             notif.notificationOccurred(.success)
+            Analytics.track(.savedToPhotos)
         } catch {
             saveMessage = error.localizedDescription
             notif.notificationOccurred(.error)
@@ -133,6 +142,7 @@ final class ExportViewModel: ObservableObject {
 
     func shareToInstagram() {
         guard let url = exportedURL else { return }
+        Analytics.track(.sharedToInstagram)
         let pasteboardItems: [String: Any] = ["com.instagram.sharedSticker.backgroundVideo": try! Data(contentsOf: url)]
         UIPasteboard.general.setItems([pasteboardItems], options: [:])
         if let igURL = URL(string: "instagram-reels://shareToReels") {
@@ -146,6 +156,7 @@ final class ExportViewModel: ObservableObject {
 
     func shareToTikTok() {
         guard exportedURL != nil else { return }
+        Analytics.track(.sharedToTikTok)
         showShareSheet = true
     }
 }

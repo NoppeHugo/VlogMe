@@ -58,6 +58,8 @@ struct PreviewScreen: View {
         .task { await vm.build() }
         .fullScreenCover(isPresented: $showExport) {
             ExportSheet(store: store, entitlements: entitlements)
+                .environmentObject(entitlements)
+                .environmentObject(store)
         }
     }
 

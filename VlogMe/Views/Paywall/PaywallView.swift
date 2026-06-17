@@ -49,6 +49,7 @@ struct PaywallView: View {
         }
         .preferredColorScheme(.dark)
         .task { await entitlements.loadProducts() }
+        .onAppear { Analytics.track(.paywallShown) }
     }
 
     // MARK: - Header
@@ -190,8 +191,7 @@ struct PaywallView: View {
 
     private func annualMonthlyLabel(_ product: Product) -> String {
         let monthly = product.price / 12
-        let fmt = product.priceFormatStyle
-        return "soit \((monthly as NSDecimalNumber).doubleValue, specifier: "%.2f") \(product.currencyCode ?? "€") / mois"
+        return "soit \(monthly.formatted(product.priceFormatStyle)) / mois"
     }
 
     // MARK: - Purchase button

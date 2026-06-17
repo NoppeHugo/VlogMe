@@ -44,6 +44,7 @@ struct ReviewPromptView: View {
         }
         .preferredColorScheme(.dark)
         .animation(.easeInOut(duration: 0.3), value: step)
+        .onAppear { Analytics.track(.reviewPromptShown) }
     }
 
     // MARK: - Mascot message
@@ -77,6 +78,7 @@ struct ReviewPromptView: View {
     }
 
     private func handleRating(_ value: Int) {
+        Analytics.track(.reviewRated, ["stars": value])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             step = value >= 4 ? .happy : .feedback
         }

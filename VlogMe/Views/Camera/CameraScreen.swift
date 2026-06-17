@@ -262,6 +262,7 @@ struct CameraScreen: View {
                    let limit = entitlements.maxVlogDuration,
                    vm.totalDuration >= limit,
                    !vm.isRecording {
+                    Analytics.track(.freeLimitReached, ["total_duration": vm.totalDuration])
                     showPaywall = true
                 } else {
                     vm.toggleRecording()
