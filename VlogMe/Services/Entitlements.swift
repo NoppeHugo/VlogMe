@@ -23,9 +23,8 @@ enum ExportResolution {
 @MainActor
 final class Entitlements: ObservableObject {
 
-    static let monthlyID         = "com.hugonoppe.vlogme.pro.monthly"
-    static let annualID          = "com.hugonoppe.vlogme.pro.annual"
-    static let freeDurationLimit: Double = 120 // 2 minutes
+    static let monthlyID = "com.hugonoppe.vlogme.pro.monthly"
+    static let annualID  = "com.hugonoppe.vlogme.pro.annual"
 
     @Published private(set) var isPro: Bool = false
     @Published private(set) var products: [Product] = []
@@ -45,7 +44,8 @@ final class Entitlements: ObservableObject {
 
     var exportResolution: ExportResolution { isPro ? .uhd4K : .hd1080 }
     var includesOutro: Bool { false }
-    var maxVlogDuration: Double? { isPro ? nil : Self.freeDurationLimit }
+    var canExport: Bool { isPro }
+    // Plus de limite de durée — l'enregistrement est illimité pour tous.
 
     var monthly: Product? { products.first { $0.id == Self.monthlyID } }
     var annual: Product?  { products.first { $0.id == Self.annualID } }

@@ -1,15 +1,14 @@
 import SwiftUI
 import AVKit
 
-/// Écran 2 — Prévisualisation (cf. §4). Lecture de la vidéo assemblée, contrôles minimaux.
-/// PAS de timeline d'édition. « Retour caméra » conserve tous les segments.
 struct PreviewScreen: View {
 
     @StateObject private var vm: PreviewViewModel
     @EnvironmentObject private var store: VlogStore
     @EnvironmentObject private var entitlements: Entitlements
     @Environment(\.dismiss) private var dismiss
-    @State private var showExport = false
+    @State private var showExport   = false
+    @State private var showPaywall  = false
 
     init(store: VlogStore) {
         _vm = StateObject(wrappedValue: PreviewViewModel(store: store))
@@ -56,6 +55,19 @@ struct PreviewScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .task { await vm.build() }
+        // Après achat dans le paywall → ouvre l'export automatiquement
+        .onChange(of: entitlements.isPro) { _, isPro in
+            if isPro && showPaywall {
+                showPaywall = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    showExport = true
+                }
+            }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(context: .export)
+                .environmentObject(entitlements)
+        }
         .fullScreenCover(isPresented: $showExport) {
             ExportSheet(store: store, entitlements: entitlements)
                 .environmentObject(entitlements)
@@ -65,9 +77,7 @@ struct PreviewScreen: View {
 
     private var bottomBar: some View {
         HStack {
-            Button {
-                dismiss()
-            } label: {
+            Button { dismiss() } label: {
                 Label("Retour caméra", systemImage: "camera.fill")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
@@ -77,9 +87,7 @@ struct PreviewScreen: View {
 
             Spacer()
 
-            Button {
-                showExport = true
-            } label: {
+            Button { handleExportTap() } label: {
                 Label("Exporter", systemImage: "square.and.arrow.up")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.black)
@@ -89,5 +97,14 @@ struct PreviewScreen: View {
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 16)
+    }
+
+    private func handleExportTap() {
+        if entitlements.canExport {
+            showExport = true
+        } else {
+            Analytics.track(.paywallShown, ["trigger": "export"])
+            showPaywall = true
+        }
     }
 }

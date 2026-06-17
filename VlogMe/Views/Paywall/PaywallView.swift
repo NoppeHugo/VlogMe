@@ -3,9 +3,12 @@ import StoreKit
 
 struct PaywallView: View {
 
+    enum Context { case export, camera, generic }
+
     @EnvironmentObject private var entitlements: Entitlements
     @Environment(\.dismiss) private var dismiss
 
+    var context: Context = .generic
     @State private var selectedPlan: String = Entitlements.annualID
     @State private var isPurchasing = false
 
@@ -49,28 +52,36 @@ struct PaywallView: View {
         }
         .preferredColorScheme(.dark)
         .task { await entitlements.loadProducts() }
-        .onAppear { Analytics.track(.paywallShown) }
     }
 
     // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.accentOrange.opacity(0.15))
-                    .frame(width: 100, height: 100)
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 44, weight: .semibold))
-                    .foregroundStyle(Color.accentOrange)
+            if context == .export {
+                MascotSpeech(
+                    message: "Ta vidéo est prête ! 🎬\nPasse à Pro pour\nla télécharger.",
+                    size: 110,
+                    accessory: .star
+                )
+                .padding(.top, 40)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(Color.accentOrange.opacity(0.15))
+                        .frame(width: 100, height: 100)
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(Color.accentOrange)
+                }
+                .padding(.top, 56)
             }
-            .padding(.top, 56)
 
             Text("VlogMe Pro")
                 .font(.system(size: 34, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
 
-            Text("Filmez sans limites.")
+            Text(context == .export ? "Exporte et partage tes vlogs." : "Filmez sans limites.")
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.white.opacity(0.55))
         }

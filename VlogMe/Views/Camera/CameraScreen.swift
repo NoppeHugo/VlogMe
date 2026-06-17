@@ -2,12 +2,10 @@ import SwiftUI
 
 struct CameraScreen: View {
 
-    @EnvironmentObject private var entitlements: Entitlements
     @StateObject private var vm: CameraViewModel
     @Binding private var showPreview: Bool
     @State private var showLibrary      = false
     @State private var showReorder      = false
-    @State private var showPaywall      = false
     @State private var segmentToTrim: VideoSegment? = nil
 
     init(camera: CameraService, store: VlogStore, showPreview: Binding<Bool>) {
@@ -79,10 +77,6 @@ struct CameraScreen: View {
                 vm.store.setSegmentTrim(seg.id, start: start, end: end)
             }
         }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-                .environmentObject(entitlements)
-        }
     }
 
     // MARK: - Top bar
@@ -119,15 +113,6 @@ struct CameraScreen: View {
                         .font(.system(size: 10, design: .monospaced).weight(.medium))
                         .foregroundStyle(remaining < 10 ? Color.red.opacity(0.9) : .white.opacity(0.6))
                         .padding(.leading, 12)
-                } else if !entitlements.isPro, let limit = entitlements.maxVlogDuration {
-                    let remaining = max(0, limit - vm.totalDuration)
-                    Button { showPaywall = true } label: {
-                        Text(remaining <= 0 ? "Limite atteinte · Pro" : "→ \(formatDuration(remaining)) gratuites")
-                            .font(.system(size: 10, design: .monospaced).weight(.medium))
-                            .foregroundStyle(remaining < 20 ? Color.accentOrange : .white.opacity(0.5))
-                            .padding(.leading, 12)
-                    }
-                    .buttonStyle(.plain)
                 }
             }
 
@@ -257,17 +242,7 @@ struct CameraScreen: View {
 
             Spacer()
 
-            RecordButton(isRecording: vm.isRecording || vm.countdown != nil) {
-                if !entitlements.isPro,
-                   let limit = entitlements.maxVlogDuration,
-                   vm.totalDuration >= limit,
-                   !vm.isRecording {
-                    Analytics.track(.freeLimitReached, ["total_duration": vm.totalDuration])
-                    showPaywall = true
-                } else {
-                    vm.toggleRecording()
-                }
-            }
+            RecordButton(isRecording: vm.isRecording || vm.countdown != nil, action: vm.toggleRecording)
 
             Spacer()
 

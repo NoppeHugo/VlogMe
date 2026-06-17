@@ -6,13 +6,11 @@ struct ExportSheet: View {
 
     @StateObject private var vm: ExportViewModel
     @EnvironmentObject private var store: VlogStore
-    @EnvironmentObject private var entitlements: Entitlements
     @Environment(\.dismiss) private var dismiss
 
     @State private var baseThumb: UIImage? = nil
     @State private var showMusicPicker = false
     @State private var showReviewPrompt = false
-    @State private var showPaywall = false
     @AppStorage("hasAskedReview") private var hasAskedReview = false
 
     init(store: VlogStore, entitlements: Entitlements) {
@@ -47,10 +45,6 @@ struct ExportSheet: View {
         }
         .sheet(isPresented: $showReviewPrompt) {
             ReviewPromptView()
-        }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView()
-                .environmentObject(entitlements)
         }
     }
 
@@ -150,26 +144,13 @@ struct ExportSheet: View {
                             .foregroundStyle(.white.opacity(0.4))
                     }
                 } else {
-                    Button {
-                        if vm.isPro { showMusicPicker = true } else { showPaywall = true }
-                    } label: {
-                        HStack {
-                            Image(systemName: "music.note")
-                            Text("Choisir une musique")
-                                .font(.subheadline.weight(.medium))
-                            Spacer()
-                            if !vm.isPro {
-                                Text("PRO")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.black)
-                                    .padding(.horizontal, 7).padding(.vertical, 3)
-                                    .background(Color.accentOrange, in: Capsule())
-                            }
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    Button { showMusicPicker = true } label: {
+                        Label("Choisir une musique", systemImage: "music.note")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
             }
@@ -189,15 +170,6 @@ struct ExportSheet: View {
             .buttonStyle(.borderedProminent)
             .tint(Color.accentOrange)
             .controlSize(.large)
-
-            if !vm.isPro {
-                Button { showPaywall = true } label: {
-                    Text("Passe à Pro pour exporter en 4K ✨")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.accentOrange)
-                        .frame(maxWidth: .infinity)
-                }
-            }
 
             Button("Annuler") { dismiss() }
                 .foregroundStyle(.white.opacity(0.5))
