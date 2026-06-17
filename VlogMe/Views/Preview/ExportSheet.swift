@@ -10,6 +10,8 @@ struct ExportSheet: View {
 
     @State private var baseThumb: UIImage? = nil
     @State private var showMusicPicker = false
+    @State private var showReviewPrompt = false
+    @AppStorage("hasAskedReview") private var hasAskedReview = false
 
     init(store: VlogStore, entitlements: Entitlements) {
         _vm = StateObject(wrappedValue: ExportViewModel(store: store, entitlements: entitlements))
@@ -21,6 +23,14 @@ struct ExportSheet: View {
             VStack(spacing: 28) { content }.padding(32)
         }
         .task { await loadThumbnail() }
+        .onChange(of: vm.exportedURL) { _, url in
+            // Après le tout premier vlog exporté, on propose la review.
+            guard url != nil, !hasAskedReview else { return }
+            hasAskedReview = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                showReviewPrompt = true
+            }
+        }
         .sheet(isPresented: $vm.showShareSheet) {
             if let url = vm.exportedURL { ShareSheet(items: [url]) }
         }
@@ -31,6 +41,9 @@ struct ExportSheet: View {
                     vm.setMusic(url: pickedURL, volume: vm.musicVolume)
                 }
             }
+        }
+        .sheet(isPresented: $showReviewPrompt) {
+            ReviewPromptView()
         }
     }
 

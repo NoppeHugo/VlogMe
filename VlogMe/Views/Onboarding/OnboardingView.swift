@@ -38,15 +38,9 @@ struct OnboardingView: View {
     private var welcomePage: some View {
         VStack(spacing: 0) {
             Spacer()
-            ZStack {
-                Circle()
-                    .fill(Color.accentOrange.opacity(0.15))
-                    .frame(width: 200, height: 200)
-                Image(systemName: "video.fill")
-                    .font(.system(size: 72, weight: .semibold))
-                    .foregroundStyle(Color.accentOrange)
-            }
-            .padding(.bottom, 48)
+
+            MascotSpeech(message: "Salut, moi c'est Vlogo !\nJe vais t'aider à faire\nton premier vlog 🎬", size: 150, accessory: .wave)
+                .padding(.bottom, 32)
 
             Text("Vlogge.")
                 .font(.system(size: 52, weight: .black, design: .rounded))
@@ -54,13 +48,6 @@ struct OnboardingView: View {
             Text("En quelques secondes.")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(Color.accentOrange)
-                .padding(.bottom, 20)
-
-            Text("Filme tes moments, assemble-les\nautomatiquement, partage en un tap.")
-                .font(.body)
-                .foregroundStyle(.white.opacity(0.6))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
 
             Spacer()
         }
@@ -135,15 +122,8 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            ZStack {
-                Circle()
-                    .fill(.white.opacity(0.06))
-                    .frame(width: 160, height: 160)
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 60, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .padding(.bottom, 40)
+            MascotSpeech(message: "Dernière étape !\nAutorise ma caméra et\nmon micro pour qu'on filme 📸", size: 140, accessory: .camera)
+                .padding(.bottom, 32)
 
             Text("Accès à ta caméra")
                 .font(.system(size: 34, weight: .black, design: .rounded))
