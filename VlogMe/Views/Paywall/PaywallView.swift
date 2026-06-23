@@ -96,8 +96,11 @@ struct PaywallView: View {
                        title: "Intros stylées sans marque",
                        detail: "Un carton d'intro animé à ton texte — sans le filigrane VlogMe.")
             benefitRow(icon: "square.stack.3d.down.right.fill", color: .pink,
-                       title: "Hook TikTok",
-                       detail: "Le montage « clips qui s'enchaînent » qui scrolle-stoppe.")
+                       title: "Hook TikTok & beat-sync",
+                       detail: "Le montage « clips qui s'enchaînent », calé sur le tempo.")
+            benefitRow(icon: "wand.and.stars", color: .purple,
+                       title: "Templates, transitions & stickers",
+                       detail: "Packs prêts à l'emploi, flash/zoom/whip, date & lieu.")
             benefitRow(icon: "infinity", color: Color.accentOrange,
                        title: "Durée illimitée",
                        detail: "Plus de limite à 2 min — vloggez autant que vous voulez.")
@@ -107,9 +110,6 @@ struct PaywallView: View {
             benefitRow(icon: "music.note", color: .green,
                        title: "Musique de fond",
                        detail: "Ajoutez vos morceaux préférés à vos vlogs.")
-            benefitRow(icon: "wand.and.stars", color: .purple,
-                       title: "Toutes les futures fonctions",
-                       detail: "Accès prioritaire aux prochaines mises à jour.")
         }
     }
 

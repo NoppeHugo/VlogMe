@@ -28,6 +28,7 @@ enum IntroGenerator {
         var branded: Bool          // ajoute le filigrane « VlogMe » (utilisateurs gratuits)
         var renderSize: CGSize
         var duration: Double
+        var isOutro: Bool = false  // carton de fin / CTA assorti à l'intro
     }
 
     // MARK: - API
@@ -40,17 +41,42 @@ enum IntroGenerator {
         renderSize: CGSize,
         duration: Double? = nil
     ) async throws -> URL {
-        let spec = Spec(
+        try await card(Spec(
             style: style,
             title: title.isEmpty ? "vlog" : title,
             subtitle: subtitle,
             branded: branded,
             renderSize: renderSize,
-            duration: duration ?? style.defaultDuration
-        )
+            duration: duration ?? style.defaultDuration,
+            isOutro: false
+        ))
+    }
 
-        let key = "\(style.rawValue)-\(spec.title)-\(spec.subtitle)-\(branded ? "b" : "n")-\(Int(renderSize.width))x\(Int(renderSize.height))"
-        let name = "vlogme-intro-\(stableHash(key)).mp4"
+    /// Carton de fin (CTA) au même style que l'intro, pour une identité cohérente.
+    static func outro(
+        style: IntroStyle,
+        title: String,
+        subtitle: String,
+        branded: Bool,
+        renderSize: CGSize,
+        duration: Double? = nil
+    ) async throws -> URL {
+        let safeStyle = style.isEnabled ? style : .minimal
+        try await card(Spec(
+            style: safeStyle,
+            title: title.isEmpty ? "merci d'avoir regardé" : title,
+            subtitle: subtitle,
+            branded: branded,
+            renderSize: renderSize,
+            duration: duration ?? 2.4,
+            isOutro: true
+        ))
+    }
+
+    private static func card(_ spec: Spec) async throws -> URL {
+        let role = spec.isOutro ? "outro" : "intro"
+        let key = "\(role)-\(spec.style.rawValue)-\(spec.title)-\(spec.subtitle)-\(spec.branded ? "b" : "n")-\(Int(spec.renderSize.width))x\(Int(spec.renderSize.height))"
+        let name = "vlogme-\(role)-\(stableHash(key)).mp4"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: url.path) { return url }
         try await render(spec, to: url)
@@ -136,7 +162,8 @@ enum IntroGenerator {
         let titleIn  = easeOut(clamp((t - 0.02) / 0.30))   // titre : fondu + zoom au début
         let subIn    = easeOut(clamp((t - 0.22) / 0.30))   // sous-titre : légèrement décalé
         let lineIn   = easeOut(clamp((t - 0.12) / 0.40))   // trait d'accent : déploiement
-        let fadeOut  = clamp((t - 0.86) / 0.14)            // sortie en fondu
+        // L'outro reste affiché (pas de fondu de sortie) pour laisser lire le CTA.
+        let fadeOut  = spec.isOutro ? 0 : clamp((t - 0.86) / 0.14)
         let globalAlpha = CGFloat(1.0 - fadeOut)
 
         let renderer = UIGraphicsImageRenderer(size: size)
@@ -163,6 +190,21 @@ enum IntroGenerator {
                 )
                 palette.accent.withAlphaComponent(globalAlpha).setFill()
                 UIBezierPath(roundedRect: lineRect, cornerRadius: lineRect.height / 2).fill()
+            }
+
+            // Chevron « ↑ » au-dessus du titre pour l'outro (cue « abonne-toi »)
+            if spec.isOutro {
+                let chevron = "▲" as NSString
+                let chevronAttrs = textAttributes(
+                    font: UIFont.systemFont(ofSize: minSide * 0.05, weight: .bold),
+                    color: palette.accent.withAlphaComponent(CGFloat(lineIn) * globalAlpha),
+                    tracking: 0
+                )
+                let cb = chevron.size(withAttributes: chevronAttrs)
+                chevron.draw(
+                    at: CGPoint(x: center.x - cb.width / 2, y: center.y - minSide * 0.30),
+                    withAttributes: chevronAttrs
+                )
             }
 
             // Titre

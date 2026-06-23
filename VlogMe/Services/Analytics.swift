@@ -27,6 +27,9 @@ enum Analytics {
         case savedToPhotos          = "saved_to_photos"
         case introConfigured        = "intro_configured"
         case hookToggled            = "hook_toggled"
+        case transitionSelected     = "transition_selected"
+        case beatSyncToggled        = "beat_sync_toggled"
+        case templateApplied        = "template_applied"
     }
 
     private static var isEnabled = false

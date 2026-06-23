@@ -214,6 +214,55 @@ final class VlogStore: ObservableObject {
         save()
     }
 
+    func setTransition(_ transition: TransitionStyle, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].transition = transition
+        save()
+    }
+
+    func setOutro(enabled: Bool, text: String, subtitle: String, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].outroEnabled = enabled
+        drafts[idx].outroText = text
+        drafts[idx].outroSubtitle = subtitle
+        save()
+    }
+
+    func setSticker(enabled: Bool, text: String, showDate: Bool, position: StickerPosition, style: StickerStyle, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].stickerEnabled = enabled
+        drafts[idx].stickerText = text
+        drafts[idx].stickerShowDate = showDate
+        drafts[idx].stickerPosition = position
+        drafts[idx].stickerStyle = style
+        save()
+    }
+
+    func setBeatSync(_ enabled: Bool, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].beatSyncEnabled = enabled
+        save()
+    }
+
+    /// Applique un template (pack cohérent) au brouillon actif.
+    func applyTemplate(_ template: VlogTemplate) {
+        updateActive { d in
+            d.introStyle = template.introStyle
+            if d.introText.trimmingCharacters(in: .whitespaces).isEmpty { d.introText = "vlog" }
+            d.introSubtitle = template.introSubtitle
+            d.filterPreset = template.filter
+            d.transition = template.transition
+            d.hookEnabled = template.hookEnabled
+            d.hookGap = template.hookGap
+            d.beatSyncEnabled = template.beatSync
+        }
+        save()
+    }
+
     func backgroundMusicURL() -> URL? {
         guard let path = activeDraft?.backgroundMusicPath else { return nil }
         return segmentsDirectory.appendingPathComponent(path)

@@ -41,8 +41,10 @@ final class PreviewViewModel: ObservableObject {
         do {
             let renderSize = store.aspectRatio.renderSize
 
+            let draft = store.activeDraft
+
             var introURL: URL? = nil
-            if let draft = store.activeDraft, draft.introStyle.isEnabled {
+            if let draft, draft.introStyle.isEnabled {
                 introURL = try? await IntroGenerator.intro(
                     style: draft.introStyle,
                     title: draft.introText,
@@ -51,15 +53,35 @@ final class PreviewViewModel: ObservableObject {
                     renderSize: renderSize
                 )
             }
-            let hook = (store.activeDraft?.hookEnabled ?? false)
-                ? HookConfig(gap: store.activeDraft?.hookGap ?? 0.15)
+
+            var outroURL: URL? = nil
+            if let draft, draft.outroEnabled {
+                outroURL = try? await IntroGenerator.outro(
+                    style: draft.introStyle.isEnabled ? draft.introStyle : .minimal,
+                    title: draft.outroText,
+                    subtitle: draft.outroSubtitle,
+                    branded: !isPro,
+                    renderSize: renderSize
+                )
+            }
+
+            // Hook, calé sur le beat si demandé et qu'une musique est définie
+            var hook: HookConfig? = (draft?.hookEnabled ?? false)
+                ? HookConfig(gap: draft?.hookGap ?? 0.15)
                 : nil
+            if (draft?.hookEnabled ?? false), (draft?.beatSyncEnabled ?? false),
+               let musicURL = store.backgroundMusicURL(),
+               let bpm = await BeatDetector.estimateBPM(url: musicURL) {
+                hook = HookConfig(gap: 0, clipDuration: BeatDetector.beatDuration(bpm: bpm), maxClips: 6)
+            }
 
             let (composition, videoComposition, _) = try await VideoAssembler.build(
                 clips: clips,
                 renderSize: renderSize,
                 introURL: introURL,
-                hook: hook
+                hook: hook,
+                transition: draft?.transition ?? .none,
+                outroURL: outroURL
             )
             let item = AVPlayerItem(asset: composition)
             item.videoComposition = videoComposition

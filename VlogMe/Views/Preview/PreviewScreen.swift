@@ -47,6 +47,18 @@ struct PreviewScreen: View {
                 .padding()
             }
 
+            // Aperçu du sticker (l'incrustation Core Animation n'apparaît pas
+            // pendant la lecture AVPlayer — on la simule ici).
+            if let draft = store.activeDraft, draft.stickerEnabled {
+                let text = StickerRenderer.displayText(
+                    text: draft.stickerText,
+                    showDate: draft.stickerShowDate,
+                    date: draft.createdAt
+                )
+                StickerOverlayView(text: text, position: draft.stickerPosition, style: draft.stickerStyle)
+                    .ignoresSafeArea(edges: .top)
+            }
+
             VStack {
                 Spacer()
                 bottomBar

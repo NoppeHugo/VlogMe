@@ -1,4 +1,5 @@
 import AVFoundation
+import QuartzCore
 
 enum AssemblerError: LocalizedError {
     case noSegments
@@ -41,7 +42,9 @@ struct VideoAssembler {
         cutSilence: Bool = false,
         introURL: URL? = nil,
         hook: HookConfig? = nil,
+        transition: TransitionStyle = .none,
         outroURL: URL? = nil,
+        stickerLayer: CALayer? = nil,
         musicURL: URL? = nil,
         musicVolume: Float = 0.3
     ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition, audioMix: AVMutableAudioMix?) {
@@ -98,14 +101,24 @@ struct VideoAssembler {
             }
         }
 
-        // Segments principaux
-        for clip in clips {
+        // Segments principaux (avec transitions entre clips)
+        for (index, clip) in clips.enumerated() {
+            // Flash blanc juste avant le clip (sauf le tout premier)
+            if index > 0, transition.flashDuration > 0 {
+                insertGap(
+                    seconds: transition.flashDuration,
+                    color: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1),
+                    cursor: &cursor,
+                    instructions: &instructions
+                )
+            }
             try await insertClip(
                 url: clip.url,
                 trimStart: clip.trimStart,
                 trimEnd: clip.trimEnd,
                 cutSilence: cutSilence,
                 isOutro: false,
+                transition: transition,
                 videoTrack: videoTrack,
                 audioTrack: audioTrack,
                 renderSize: renderSize,
@@ -135,6 +148,20 @@ struct VideoAssembler {
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.instructions = instructions
 
+        // Sticker date / lieu incrusté sur tout le vlog (export uniquement)
+        if let stickerLayer {
+            let videoLayer = CALayer()
+            videoLayer.frame = CGRect(origin: .zero, size: renderSize)
+            let parentLayer = CALayer()
+            parentLayer.frame = CGRect(origin: .zero, size: renderSize)
+            parentLayer.addSublayer(videoLayer)
+            parentLayer.addSublayer(stickerLayer)
+            videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+                postProcessingAsVideoLayer: videoLayer,
+                in: parentLayer
+            )
+        }
+
         // Musique de fond
         let audioMix = try await addBackgroundMusic(
             musicURL: musicURL,
@@ -154,6 +181,7 @@ struct VideoAssembler {
         trimEnd: CMTime?,
         cutSilence: Bool,
         isOutro: Bool,
+        transition: TransitionStyle = .none,
         videoTrack: AVMutableCompositionTrack,
         audioTrack: AVMutableCompositionTrack?,
         renderSize: CGSize,
@@ -193,6 +221,7 @@ struct VideoAssembler {
 
         let assetAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first
 
+        var isFirstRange = true
         for range in rangesToInsert {
             try videoTrack.insertTimeRange(range, of: assetVideoTrack, at: cursor)
             if let audioTrack, let assetAudioTrack {
@@ -200,7 +229,18 @@ struct VideoAssembler {
             }
 
             let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
-            layerInstruction.setTransform(transform, at: cursor)
+            // Rampe de transition au tout début du clip (zoom punch / whip)
+            let ramp = isFirstRange ? transition.rampDuration : 0
+            if ramp > 0, let startTransform = entryTransform(for: transition, base: transform, renderSize: renderSize) {
+                let rampTime = CMTimeMinimum(CMTime(seconds: ramp, preferredTimescale: 600), range.duration)
+                layerInstruction.setTransformRamp(
+                    fromStart: startTransform,
+                    toEnd: transform,
+                    timeRange: CMTimeRange(start: cursor, duration: rampTime)
+                )
+            } else {
+                layerInstruction.setTransform(transform, at: cursor)
+            }
 
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: cursor, duration: range.duration)
@@ -208,6 +248,30 @@ struct VideoAssembler {
             instructions.append(instruction)
 
             cursor = cursor + range.duration
+            isFirstRange = false
+        }
+    }
+
+    /// Transform de départ d'une transition (l'arrivée étant le transform normal).
+    private static func entryTransform(
+        for transition: TransitionStyle,
+        base: CGAffineTransform,
+        renderSize: CGSize
+    ) -> CGAffineTransform? {
+        switch transition {
+        case .none, .flash:
+            return nil
+        case .zoom:
+            // Zoom supplémentaire autour du centre de rendu (se pose vers le transform normal).
+            // scaleAboutCenter(q) = s·q + (1−s)·centre, appliqué après le transform de base.
+            let s: CGFloat = 1.14
+            let cx = renderSize.width / 2, cy = renderSize.height / 2
+            let scaleAboutCenter = CGAffineTransform(a: s, b: 0, c: 0, d: s,
+                                                     tx: (1 - s) * cx, ty: (1 - s) * cy)
+            return base.concatenating(scaleAboutCenter)
+        case .whip:
+            // Glissé horizontal rapide depuis la droite
+            return base.concatenating(CGAffineTransform(translationX: renderSize.width * 0.6, y: 0))
         }
     }
 
@@ -216,6 +280,7 @@ struct VideoAssembler {
     /// extraits du hook.
     private static func insertGap(
         seconds: Double,
+        color: CGColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1),
         cursor: inout CMTime,
         instructions: inout [AVMutableVideoCompositionInstruction]
     ) {
@@ -223,7 +288,7 @@ struct VideoAssembler {
         let duration = CMTime(seconds: seconds, preferredTimescale: 600)
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: cursor, duration: duration)
-        instruction.backgroundColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+        instruction.backgroundColor = color
         instruction.layerInstructions = []
         instructions.append(instruction)
         cursor = cursor + duration

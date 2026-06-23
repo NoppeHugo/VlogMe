@@ -21,6 +21,24 @@ struct VlogDraft: Identifiable, Codable {
     var hookEnabled: Bool                // aperçu rapide des clips au début
     var hookGap: Double                  // pause entre chaque clip (0.1 – 0.2 s)
 
+    // MARK: - Transitions entre clips
+    var transition: TransitionStyle
+
+    // MARK: - Outro / CTA assorti à l'intro
+    var outroEnabled: Bool
+    var outroText: String                // ex: "@pseudo"
+    var outroSubtitle: String            // ex: "abonne-toi"
+
+    // MARK: - Sticker date / lieu
+    var stickerEnabled: Bool
+    var stickerText: String              // ex: "Paris ☕️"
+    var stickerShowDate: Bool
+    var stickerPosition: StickerPosition
+    var stickerStyle: StickerStyle
+
+    // MARK: - Beat-sync (cale le hook sur les temps de la musique)
+    var beatSyncEnabled: Bool
+
     init(name: String = "") {
         id = UUID()
         let f = DateFormatter()
@@ -41,6 +59,16 @@ struct VlogDraft: Identifiable, Codable {
         introSubtitle = ""
         hookEnabled = false
         hookGap = 0.15
+        transition = .none
+        outroEnabled = false
+        outroText = ""
+        outroSubtitle = "abonne-toi"
+        stickerEnabled = false
+        stickerText = ""
+        stickerShowDate = false
+        stickerPosition = .topLeading
+        stickerStyle = .pill
+        beatSyncEnabled = false
     }
 
     // MARK: - Decodable rétro-compatible
@@ -53,6 +81,9 @@ struct VlogDraft: Identifiable, Codable {
         case id, name, createdAt, segments, aspectRatio, targetDuration, filterPreset
         case maxSegmentDuration, backgroundMusicPath, backgroundMusicVolume
         case introStyle, introText, introSubtitle, hookEnabled, hookGap
+        case transition, outroEnabled, outroText, outroSubtitle
+        case stickerEnabled, stickerText, stickerShowDate, stickerPosition, stickerStyle
+        case beatSyncEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -73,6 +104,16 @@ struct VlogDraft: Identifiable, Codable {
         introSubtitle         = try c.decodeIfPresent(String.self, forKey: .introSubtitle) ?? ""
         hookEnabled           = try c.decodeIfPresent(Bool.self, forKey: .hookEnabled) ?? false
         hookGap               = try c.decodeIfPresent(Double.self, forKey: .hookGap) ?? 0.15
+        transition            = try c.decodeIfPresent(TransitionStyle.self, forKey: .transition) ?? .none
+        outroEnabled          = try c.decodeIfPresent(Bool.self, forKey: .outroEnabled) ?? false
+        outroText             = try c.decodeIfPresent(String.self, forKey: .outroText) ?? ""
+        outroSubtitle         = try c.decodeIfPresent(String.self, forKey: .outroSubtitle) ?? "abonne-toi"
+        stickerEnabled        = try c.decodeIfPresent(Bool.self, forKey: .stickerEnabled) ?? false
+        stickerText           = try c.decodeIfPresent(String.self, forKey: .stickerText) ?? ""
+        stickerShowDate       = try c.decodeIfPresent(Bool.self, forKey: .stickerShowDate) ?? false
+        stickerPosition       = try c.decodeIfPresent(StickerPosition.self, forKey: .stickerPosition) ?? .topLeading
+        stickerStyle          = try c.decodeIfPresent(StickerStyle.self, forKey: .stickerStyle) ?? .pill
+        beatSyncEnabled       = try c.decodeIfPresent(Bool.self, forKey: .beatSyncEnabled) ?? false
     }
 
     var totalDuration: Double { segments.reduce(0) { $0 + $1.effectiveDuration } }

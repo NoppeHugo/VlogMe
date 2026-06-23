@@ -68,6 +68,8 @@ struct ExportSheet: View {
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.white)
 
+                    templateSection
+
                     // Aperçu du filtre
                     if let thumb = baseThumb {
                         FilterPreviewImage(image: thumb, preset: vm.filterPreset)
@@ -94,9 +96,14 @@ struct ExportSheet: View {
                         }
                     }
 
-                    introSection
-
-                    hookSection
+                    // Regroupées pour rester sous la limite de 10 vues du ViewBuilder
+                    Group {
+                        introSection
+                        outroSection
+                        hookSection
+                        transitionSection
+                        stickerSection
+                    }
 
                     // Silence automatique
                     VStack(alignment: .leading, spacing: 8) {
@@ -305,8 +312,184 @@ struct ExportSheet: View {
                         .foregroundStyle(.white.opacity(0.7))
                         .frame(width: 44, alignment: .trailing)
                 }
+
+                Toggle(isOn: Binding(
+                    get: { vm.beatSyncEnabled },
+                    set: { vm.setBeatSync($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Caler sur le beat", systemImage: "waveform.path")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Text(vm.musicURL == nil
+                             ? "Ajoute une musique pour activer le beat-sync"
+                             : "Les coupes du hook tombent sur le tempo")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
+                .tint(Color.accentOrange)
+                .disabled(vm.musicURL == nil)
+                .opacity(vm.musicURL == nil ? 0.5 : 1)
             }
         }
+    }
+
+    // MARK: - Templates
+
+    private var templateSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentOrange)
+                Text("Templates")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(VlogTemplate.all) { template in
+                        Button { vm.applyTemplate(template) } label: {
+                            HStack(spacing: 6) {
+                                Text(template.emoji)
+                                Text(template.name)
+                                    .font(.subheadline.weight(.medium))
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(.white.opacity(0.10), in: Capsule())
+                            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+                        }
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    // MARK: - Outro / CTA
+
+    private var outroSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text("Outro / CTA")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { vm.outroEnabled },
+                    set: { vm.setOutro(enabled: $0, text: vm.outroText, subtitle: vm.outroSubtitle) }
+                ))
+                .labelsHidden()
+                .tint(Color.accentOrange)
+            }
+            if vm.outroEnabled {
+                Text("Au même style que ton intro, pour finir signé.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                TextField("", text: Binding(
+                    get: { vm.outroText },
+                    set: { vm.setOutro(enabled: true, text: $0, subtitle: vm.outroSubtitle) }
+                ), prompt: Text("Titre (ex : @ton_pseudo)").foregroundColor(.white.opacity(0.35)))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                TextField("", text: Binding(
+                    get: { vm.outroSubtitle },
+                    set: { vm.setOutro(enabled: true, text: vm.outroText, subtitle: $0) }
+                ), prompt: Text("Sous-titre (ex : abonne-toi)").foregroundColor(.white.opacity(0.35)))
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    // MARK: - Transitions
+
+    private var transitionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Transitions entre clips")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.6))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(TransitionStyle.allCases) { t in
+                        FilterChip(label: t.label, isSelected: vm.transition == t) {
+                            vm.setTransition(t)
+                        }
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    // MARK: - Sticker date / lieu
+
+    private var stickerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text("Sticker date / lieu")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { vm.stickerEnabled },
+                    set: { commitSticker(enabled: $0) }
+                ))
+                .labelsHidden()
+                .tint(Color.accentOrange)
+            }
+            if vm.stickerEnabled {
+                TextField("", text: Binding(
+                    get: { vm.stickerText },
+                    set: { vm.setSticker(enabled: true, text: $0, showDate: vm.stickerShowDate, position: vm.stickerPosition, style: vm.stickerStyle) }
+                ), prompt: Text("Lieu / texte (ex : Paris ☕️)").foregroundColor(.white.opacity(0.35)))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+
+                Toggle(isOn: Binding(
+                    get: { vm.stickerShowDate },
+                    set: { vm.setSticker(enabled: true, text: vm.stickerText, showDate: $0, position: vm.stickerPosition, style: vm.stickerStyle) }
+                )) {
+                    Text("Afficher la date")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .tint(Color.accentOrange)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(StickerStyle.allCases) { s in
+                            FilterChip(label: s.label, isSelected: vm.stickerStyle == s) {
+                                vm.setSticker(enabled: true, text: vm.stickerText, showDate: vm.stickerShowDate, position: vm.stickerPosition, style: s)
+                            }
+                        }
+                        Rectangle()
+                            .fill(.white.opacity(0.15))
+                            .frame(width: 1, height: 22)
+                        ForEach(StickerPosition.allCases) { p in
+                            FilterChip(label: p.label, isSelected: vm.stickerPosition == p) {
+                                vm.setSticker(enabled: true, text: vm.stickerText, showDate: vm.stickerShowDate, position: p, style: vm.stickerStyle)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+        }
+    }
+
+    private func commitSticker(enabled: Bool) {
+        // À la 1re activation sans texte ni date, on active la date par défaut.
+        let showDate = enabled && vm.stickerText.isEmpty && !vm.stickerShowDate ? true : vm.stickerShowDate
+        vm.setSticker(enabled: enabled, text: vm.stickerText, showDate: showDate, position: vm.stickerPosition, style: vm.stickerStyle)
     }
 
     // MARK: - Encodage en cours
