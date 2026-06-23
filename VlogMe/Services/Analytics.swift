@@ -25,6 +25,8 @@ enum Analytics {
         case sharedToInstagram      = "shared_to_instagram"
         case sharedToTikTok         = "shared_to_tiktok"
         case savedToPhotos          = "saved_to_photos"
+        case introConfigured        = "intro_configured"
+        case hookToggled            = "hook_toggled"
     }
 
     private static var isEnabled = false

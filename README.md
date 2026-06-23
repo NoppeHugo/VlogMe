@@ -11,6 +11,7 @@ Ce dépôt contient le **socle de code des Phases 1 → 3** de la roadmap (cf. c
 | **3 — Assemblage & prévisualisation** | `AVMutableComposition` (cuts secs), format 9:16 / 16:9 via `AVMutableVideoComposition`, écran de lecture | ✅ codé |
 | **4 — Export & partage** | `AVAssetExportSession` + progression, sauvegarde Photos (`PHPhotoLibrary`), share sheet (`UIActivityViewController`), **outro de marque** 3 s en gratuit, résolution 1080p/4K | ✅ codé |
 | 5 — Monétisation (RevenueCat) | Paywall, limites freemium | ⬜ à venir |
+| **Signature — Intro stylée & Hook** | Carton d'intro animé (`IntroGenerator`, 5 styles, titre + sous-titre éditables) inséré au début ; montage « hook » TikTok (extraits des 1ers clips, pause 0,1–0,2 s) ; retardateur caméra réglable (Off/3/5/10 s) | ✅ codé |
 
 > ⚠️ **Code non compilé ici.** Il a été scaffoldé hors Mac/Xcode (environnement Linux). Attends-toi à de petits ajustements de compilation au premier build sur ton Mac — c'est normal. Le point le plus susceptible de demander un réglage sur device réel est la **transform d'aspect-fill** dans `VideoAssembler.swift` (cadrage des segments), identifié comme délicat dans le cahier des charges (§11).
 

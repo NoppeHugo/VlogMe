@@ -21,7 +21,11 @@ final class PreviewViewModel: ObservableObject {
     }
 
     /// Assemble les segments et prépare un lecteur sur la composition (sans ré-encodage).
-    func build() async {
+    ///
+    /// L'intro stylée et le hook sont inclus dès la prévisualisation : c'est le
+    /// « teaser » offert à tous (même gratuits) pour donner envie de passer à Pro.
+    /// `isPro` n'enlève que le filigrane de marque.
+    func build(isPro: Bool = false) async {
         state = .loading
         let clips = store.segments.map { seg in
             SegmentClip(
@@ -35,9 +39,27 @@ final class PreviewViewModel: ObservableObject {
             return
         }
         do {
+            let renderSize = store.aspectRatio.renderSize
+
+            var introURL: URL? = nil
+            if let draft = store.activeDraft, draft.introStyle.isEnabled {
+                introURL = try? await IntroGenerator.intro(
+                    style: draft.introStyle,
+                    title: draft.introText,
+                    subtitle: draft.introSubtitle,
+                    branded: !isPro,
+                    renderSize: renderSize
+                )
+            }
+            let hook = (store.activeDraft?.hookEnabled ?? false)
+                ? HookConfig(gap: store.activeDraft?.hookGap ?? 0.15)
+                : nil
+
             let (composition, videoComposition, _) = try await VideoAssembler.build(
                 clips: clips,
-                renderSize: store.aspectRatio.renderSize
+                renderSize: renderSize,
+                introURL: introURL,
+                hook: hook
             )
             let item = AVPlayerItem(asset: composition)
             item.videoComposition = videoComposition

@@ -92,6 +92,12 @@ struct PaywallView: View {
 
     private var benefitsList: some View {
         VStack(spacing: 16) {
+            benefitRow(icon: "sparkles", color: Color.accentOrange,
+                       title: "Intros stylées sans marque",
+                       detail: "Un carton d'intro animé à ton texte — sans le filigrane VlogMe.")
+            benefitRow(icon: "square.stack.3d.down.right.fill", color: .pink,
+                       title: "Hook TikTok",
+                       detail: "Le montage « clips qui s'enchaînent » qui scrolle-stoppe.")
             benefitRow(icon: "infinity", color: Color.accentOrange,
                        title: "Durée illimitée",
                        detail: "Plus de limite à 2 min — vloggez autant que vous voulez.")

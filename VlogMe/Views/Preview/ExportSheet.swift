@@ -61,120 +61,251 @@ struct ExportSheet: View {
     // MARK: - Configuration (choix filtre + silence)
 
     private var configView: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text("Préparer l'export")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.white)
+        VStack(spacing: 0) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Préparer l'export")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.white)
 
-            // Aperçu du filtre
-            if let thumb = baseThumb {
-                FilterPreviewImage(image: thumb, preset: vm.filterPreset)
+                    // Aperçu du filtre
+                    if let thumb = baseThumb {
+                        FilterPreviewImage(image: thumb, preset: vm.filterPreset)
+                    }
+
+                    // Filtre
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Filtre")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.6))
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(FilterPreset.allCases) { preset in
+                                    FilterChip(
+                                        label: preset.label,
+                                        isSelected: vm.filterPreset == preset
+                                    ) {
+                                        vm.setFilter(preset)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                        }
+                    }
+
+                    introSection
+
+                    hookSection
+
+                    // Silence automatique
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: $vm.cutSilence) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Couper les silences")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                Text("Supprime les passages sans son avant l'export")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+                        }
+                        .tint(Color.accentOrange)
+                    }
+
+                    // Musique de fond
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Musique de fond")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.6))
+
+                        if let musicURL = vm.musicURL {
+                            HStack(spacing: 10) {
+                                Image(systemName: "music.note")
+                                    .foregroundStyle(Color.accentOrange)
+                                Text(musicURL.deletingPathExtension().lastPathComponent)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                Spacer()
+                                Button { vm.removeMusic() } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.white.opacity(0.4))
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+
+                            HStack {
+                                Image(systemName: "speaker.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.4))
+                                Slider(value: $vm.musicVolume, in: 0...1) { _ in
+                                    vm.setMusic(url: musicURL, volume: vm.musicVolume)
+                                }
+                                .tint(Color.accentOrange)
+                                Image(systemName: "speaker.wave.3.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.4))
+                            }
+                        } else {
+                            Button { showMusicPicker = true } label: {
+                                Label("Choisir une musique", systemImage: "music.note")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 20)
             }
 
-            // Filtre
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Filtre")
+            VStack(spacing: 10) {
+                Button {
+                    Task { await vm.export() }
+                } label: {
+                    HStack {
+                        Spacer()
+                        Label("Exporter · \(vm.resolutionLabel)", systemImage: "square.and.arrow.up")
+                            .font(.subheadline.weight(.bold))
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.accentOrange)
+                .controlSize(.large)
+
+                Button("Annuler") { dismiss() }
+                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.top, 12)
+        }
+    }
+
+    // MARK: - Intro stylée
+
+    private var introEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { vm.introStyle.isEnabled },
+            set: { on in
+                vm.setIntro(
+                    style: on ? (lastIntroStyle) : .none,
+                    text: vm.introText,
+                    subtitle: vm.introSubtitle
+                )
+            }
+        )
+    }
+
+    private var lastIntroStyle: IntroStyle {
+        vm.introStyle.isEnabled ? vm.introStyle : .minimal
+    }
+
+    private var introSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Text("Intro stylée")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.6))
+                Image(systemName: "sparkles")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentOrange)
+                Spacer()
+                Toggle("", isOn: introEnabledBinding)
+                    .labelsHidden()
+                    .tint(Color.accentOrange)
+            }
 
+            if vm.introStyle.isEnabled {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(FilterPreset.allCases) { preset in
+                        ForEach(IntroStyle.selectable) { style in
                             FilterChip(
-                                label: preset.label,
-                                isSelected: vm.filterPreset == preset
+                                label: style.label,
+                                isSelected: vm.introStyle == style
                             ) {
-                                vm.setFilter(preset)
+                                vm.setIntro(style: style, text: vm.introText, subtitle: vm.introSubtitle)
                             }
                         }
                     }
                     .padding(.horizontal, 2)
                 }
-            }
 
-            // Silence automatique
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle(isOn: $vm.cutSilence) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Couper les silences")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Text("Supprime les passages sans son avant l'export")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                }
-                .tint(Color.accentOrange)
-            }
-
-            // Musique de fond
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Musique de fond")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.6))
-
-                if let musicURL = vm.musicURL {
-                    HStack(spacing: 10) {
-                        Image(systemName: "music.note")
-                            .foregroundStyle(Color.accentOrange)
-                        Text(musicURL.deletingPathExtension().lastPathComponent)
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        Spacer()
-                        Button { vm.removeMusic() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.white.opacity(0.4))
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                TextField("", text: introTextBinding, prompt: Text("Titre (ex : vlog)").foregroundColor(.white.opacity(0.35)))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
                     .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    .submitLabel(.done)
 
-                    HStack {
-                        Image(systemName: "speaker.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.4))
-                        Slider(value: $vm.musicVolume, in: 0...1) { _ in
-                            vm.setMusic(url: musicURL, volume: vm.musicVolume)
-                        }
-                        .tint(Color.accentOrange)
-                        Image(systemName: "speaker.wave.3.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                } else {
-                    Button { showMusicPicker = true } label: {
-                        Label("Choisir une musique", systemImage: "music.note")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                    }
+                TextField("", text: introSubtitleBinding, prompt: Text("Sous-titre (ex : day in my life)").foregroundColor(.white.opacity(0.35)))
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                    .submitLabel(.done)
+            }
+        }
+    }
+
+    private var introTextBinding: Binding<String> {
+        Binding(
+            get: { vm.introText },
+            set: { vm.setIntro(style: vm.introStyle, text: $0, subtitle: vm.introSubtitle) }
+        )
+    }
+
+    private var introSubtitleBinding: Binding<String> {
+        Binding(
+            get: { vm.introSubtitle },
+            set: { vm.setIntro(style: vm.introStyle, text: vm.introText, subtitle: $0) }
+        )
+    }
+
+    // MARK: - Hook montage
+
+    private var hookSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(
+                get: { vm.hookEnabled },
+                set: { vm.setHook(enabled: $0, gap: vm.hookGap) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Hook · clips qui s'enchaînent")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Text("Aperçu rapide des premiers clips au début, façon TikTok")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
                 }
             }
-
-            Spacer()
-
-            Button {
-                Task { await vm.export() }
-            } label: {
-                HStack {
-                    Spacer()
-                    Label("Exporter · \(vm.resolutionLabel)", systemImage: "square.and.arrow.up")
-                        .font(.subheadline.weight(.bold))
-                    Spacer()
-                }
-            }
-            .buttonStyle(.borderedProminent)
             .tint(Color.accentOrange)
-            .controlSize(.large)
 
-            Button("Annuler") { dismiss() }
-                .foregroundStyle(.white.opacity(0.5))
-                .font(.footnote)
-                .frame(maxWidth: .infinity)
+            if vm.hookEnabled {
+                HStack {
+                    Text("Rythme")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                    Slider(
+                        value: Binding(
+                            get: { vm.hookGap },
+                            set: { vm.setHook(enabled: true, gap: $0) }
+                        ),
+                        in: 0.1...0.2
+                    )
+                    .tint(Color.accentOrange)
+                    Text(String(format: "%.2fs", vm.hookGap))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
         }
     }
 

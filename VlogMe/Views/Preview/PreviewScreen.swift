@@ -54,7 +54,7 @@ struct PreviewScreen: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await vm.build() }
+        .task { await vm.build(isPro: entitlements.isPro) }
         // Après achat dans le paywall → ouvre l'export automatiquement
         .onChange(of: entitlements.isPro) { _, isPro in
             if isPro && showPaywall {

@@ -197,6 +197,23 @@ final class VlogStore: ObservableObject {
         save()
     }
 
+    func setIntro(style: IntroStyle, text: String, subtitle: String, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].introStyle = style
+        drafts[idx].introText = text
+        drafts[idx].introSubtitle = subtitle
+        save()
+    }
+
+    func setHook(enabled: Bool, gap: Double, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].hookEnabled = enabled
+        drafts[idx].hookGap = min(0.2, max(0.1, gap))
+        save()
+    }
+
     func backgroundMusicURL() -> URL? {
         guard let path = activeDraft?.backgroundMusicPath else { return nil }
         return segmentsDirectory.appendingPathComponent(path)

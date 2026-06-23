@@ -14,7 +14,17 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var isSwitchingCamera = false
     @Published private(set) var countdown: Int? = nil
     @Published var showGrid = false
-    @Published var countdownEnabled = false
+
+    /// Retardateur (en secondes) avant le lancement de l'enregistrement.
+    /// 0 = désactivé. Réglable et mémorisé entre les sessions.
+    @Published var countdownSeconds: Int = UserDefaults.standard.integer(forKey: "countdownSeconds") {
+        didSet { UserDefaults.standard.set(countdownSeconds, forKey: "countdownSeconds") }
+    }
+
+    /// Valeurs proposées dans le sélecteur de retardateur.
+    let countdownOptions = [0, 3, 5, 10]
+
+    var countdownEnabled: Bool { countdownSeconds > 0 }
 
     private var cancellables = Set<AnyCancellable>()
     private var timer: AnyCancellable?
@@ -127,7 +137,7 @@ final class CameraViewModel: ObservableObject {
     }
 
     private func runCountdownThenRecord() async {
-        for n in stride(from: 3, through: 1, by: -1) {
+        for n in stride(from: countdownSeconds, through: 1, by: -1) {
             guard !Task.isCancelled else { return }
             countdown = n
             impactLight.impactOccurred()

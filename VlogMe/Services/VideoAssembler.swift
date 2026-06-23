@@ -19,12 +19,28 @@ struct SegmentClip {
     let trimEnd: CMTime?     // nil = jusqu'à la fin
 }
 
+/// Réglages du montage « hook » (tendance TikTok) : un aperçu rapide des premiers
+/// clips, séparés par une courte pause, juste avant le vlog complet.
+struct HookConfig {
+    var gap: Double           // pause entre chaque clip (0.1 – 0.2 s)
+    var clipDuration: Double  // durée de chaque extrait
+    var maxClips: Int         // nombre d'extraits max
+
+    init(gap: Double = 0.15, clipDuration: Double = 0.5, maxClips: Int = 5) {
+        self.gap = min(0.2, max(0.1, gap))
+        self.clipDuration = clipDuration
+        self.maxClips = maxClips
+    }
+}
+
 struct VideoAssembler {
 
     static func build(
         clips: [SegmentClip],
         renderSize: CGSize,
         cutSilence: Bool = false,
+        introURL: URL? = nil,
+        hook: HookConfig? = nil,
         outroURL: URL? = nil,
         musicURL: URL? = nil,
         musicVolume: Float = 0.3
@@ -45,6 +61,42 @@ struct VideoAssembler {
 
         var cursor = CMTime.zero
         var instructions: [AVMutableVideoCompositionInstruction] = []
+
+        // Intro stylée (carton de marque, plein clip)
+        if let introURL {
+            try await insertClip(
+                url: introURL,
+                trimStart: .zero,
+                trimEnd: nil,
+                cutSilence: false,
+                isOutro: true,
+                videoTrack: videoTrack,
+                audioTrack: audioTrack,
+                renderSize: renderSize,
+                cursor: &cursor,
+                instructions: &instructions
+            )
+        }
+
+        // Hook : extraits courts des premiers clips, séparés par une pause noire
+        if let hook {
+            let count = min(hook.maxClips, clips.count)
+            for clip in clips.prefix(count) {
+                try await insertClip(
+                    url: clip.url,
+                    trimStart: clip.trimStart,
+                    trimEnd: CMTimeAdd(clip.trimStart, CMTime(seconds: hook.clipDuration, preferredTimescale: 600)),
+                    cutSilence: false,
+                    isOutro: false,
+                    videoTrack: videoTrack,
+                    audioTrack: audioTrack,
+                    renderSize: renderSize,
+                    cursor: &cursor,
+                    instructions: &instructions
+                )
+                insertGap(seconds: hook.gap, cursor: &cursor, instructions: &instructions)
+            }
+        }
 
         // Segments principaux
         for clip in clips {
@@ -120,9 +172,10 @@ struct VideoAssembler {
             renderSize: renderSize
         )
 
-        // Plage effective après trim
-        let effectiveStart = trimStart
-        let effectiveEnd   = trimEnd ?? duration
+        // Plage effective après trim (bornée à la durée réelle du clip)
+        let effectiveStart = CMTimeMinimum(trimStart, duration)
+        let effectiveEnd   = CMTimeMinimum(trimEnd ?? duration, duration)
+        guard effectiveEnd > effectiveStart else { return }
         let effectiveRange = CMTimeRange(start: effectiveStart, end: effectiveEnd)
 
         // Sous-plages (coupe silence ou plage entière)
@@ -156,6 +209,24 @@ struct VideoAssembler {
 
             cursor = cursor + range.duration
         }
+    }
+
+    /// Insère une pause noire (trou dans les pistes) couverte par une instruction
+    /// vide — rendue en noir par `AVVideoComposition`. Sert d'entracte entre les
+    /// extraits du hook.
+    private static func insertGap(
+        seconds: Double,
+        cursor: inout CMTime,
+        instructions: inout [AVMutableVideoCompositionInstruction]
+    ) {
+        guard seconds > 0 else { return }
+        let duration = CMTime(seconds: seconds, preferredTimescale: 600)
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: cursor, duration: duration)
+        instruction.backgroundColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+        instruction.layerInstructions = []
+        instructions.append(instruction)
+        cursor = cursor + duration
     }
 
     private static func addBackgroundMusic(
