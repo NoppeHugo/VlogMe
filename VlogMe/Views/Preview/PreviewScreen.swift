@@ -47,6 +47,18 @@ struct PreviewScreen: View {
                 .padding()
             }
 
+            // Aperçu du sticker (l'incrustation Core Animation n'apparaît pas
+            // pendant la lecture AVPlayer — on la simule ici).
+            if let draft = store.activeDraft, draft.stickerEnabled {
+                let text = StickerRenderer.displayText(
+                    text: draft.stickerText,
+                    showDate: draft.stickerShowDate,
+                    date: draft.createdAt
+                )
+                StickerOverlayView(text: text, position: draft.stickerPosition, style: draft.stickerStyle)
+                    .ignoresSafeArea(edges: .top)
+            }
+
             VStack {
                 Spacer()
                 bottomBar
@@ -54,7 +66,7 @@ struct PreviewScreen: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await vm.build() }
+        .task { await vm.build(isPro: entitlements.isPro) }
         // Après achat dans le paywall → ouvre l'export automatiquement
         .onChange(of: entitlements.isPro) { _, isPro in
             if isPro && showPaywall {

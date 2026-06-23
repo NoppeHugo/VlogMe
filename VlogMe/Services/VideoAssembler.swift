@@ -1,4 +1,5 @@
 import AVFoundation
+import QuartzCore
 
 enum AssemblerError: LocalizedError {
     case noSegments
@@ -19,13 +20,31 @@ struct SegmentClip {
     let trimEnd: CMTime?     // nil = jusqu'à la fin
 }
 
+/// Réglages du montage « hook » (tendance TikTok) : un aperçu rapide des premiers
+/// clips, séparés par une courte pause, juste avant le vlog complet.
+struct HookConfig {
+    var gap: Double           // pause entre chaque clip (0.1 – 0.2 s)
+    var clipDuration: Double  // durée de chaque extrait
+    var maxClips: Int         // nombre d'extraits max
+
+    init(gap: Double = 0.15, clipDuration: Double = 0.5, maxClips: Int = 5) {
+        self.gap = min(0.2, max(0.1, gap))
+        self.clipDuration = clipDuration
+        self.maxClips = maxClips
+    }
+}
+
 struct VideoAssembler {
 
     static func build(
         clips: [SegmentClip],
         renderSize: CGSize,
         cutSilence: Bool = false,
+        introURL: URL? = nil,
+        hook: HookConfig? = nil,
+        transition: TransitionStyle = .none,
         outroURL: URL? = nil,
+        stickerLayer: CALayer? = nil,
         musicURL: URL? = nil,
         musicVolume: Float = 0.3
     ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition, audioMix: AVMutableAudioMix?) {
@@ -46,14 +65,60 @@ struct VideoAssembler {
         var cursor = CMTime.zero
         var instructions: [AVMutableVideoCompositionInstruction] = []
 
-        // Segments principaux
-        for clip in clips {
+        // Intro stylée (carton de marque, plein clip)
+        if let introURL {
+            try await insertClip(
+                url: introURL,
+                trimStart: .zero,
+                trimEnd: nil,
+                cutSilence: false,
+                isOutro: true,
+                videoTrack: videoTrack,
+                audioTrack: audioTrack,
+                renderSize: renderSize,
+                cursor: &cursor,
+                instructions: &instructions
+            )
+        }
+
+        // Hook : extraits courts des premiers clips, séparés par une pause noire
+        if let hook {
+            let count = min(hook.maxClips, clips.count)
+            for clip in clips.prefix(count) {
+                try await insertClip(
+                    url: clip.url,
+                    trimStart: clip.trimStart,
+                    trimEnd: CMTimeAdd(clip.trimStart, CMTime(seconds: hook.clipDuration, preferredTimescale: 600)),
+                    cutSilence: false,
+                    isOutro: false,
+                    videoTrack: videoTrack,
+                    audioTrack: audioTrack,
+                    renderSize: renderSize,
+                    cursor: &cursor,
+                    instructions: &instructions
+                )
+                insertGap(seconds: hook.gap, cursor: &cursor, instructions: &instructions)
+            }
+        }
+
+        // Segments principaux (avec transitions entre clips)
+        for (index, clip) in clips.enumerated() {
+            // Flash blanc juste avant le clip (sauf le tout premier)
+            if index > 0, transition.flashDuration > 0 {
+                insertGap(
+                    seconds: transition.flashDuration,
+                    color: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1),
+                    cursor: &cursor,
+                    instructions: &instructions
+                )
+            }
             try await insertClip(
                 url: clip.url,
                 trimStart: clip.trimStart,
                 trimEnd: clip.trimEnd,
                 cutSilence: cutSilence,
                 isOutro: false,
+                transition: transition,
                 videoTrack: videoTrack,
                 audioTrack: audioTrack,
                 renderSize: renderSize,
@@ -83,6 +148,20 @@ struct VideoAssembler {
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.instructions = instructions
 
+        // Sticker date / lieu incrusté sur tout le vlog (export uniquement)
+        if let stickerLayer {
+            let videoLayer = CALayer()
+            videoLayer.frame = CGRect(origin: .zero, size: renderSize)
+            let parentLayer = CALayer()
+            parentLayer.frame = CGRect(origin: .zero, size: renderSize)
+            parentLayer.addSublayer(videoLayer)
+            parentLayer.addSublayer(stickerLayer)
+            videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+                postProcessingAsVideoLayer: videoLayer,
+                in: parentLayer
+            )
+        }
+
         // Musique de fond
         let audioMix = try await addBackgroundMusic(
             musicURL: musicURL,
@@ -102,6 +181,7 @@ struct VideoAssembler {
         trimEnd: CMTime?,
         cutSilence: Bool,
         isOutro: Bool,
+        transition: TransitionStyle = .none,
         videoTrack: AVMutableCompositionTrack,
         audioTrack: AVMutableCompositionTrack?,
         renderSize: CGSize,
@@ -120,9 +200,10 @@ struct VideoAssembler {
             renderSize: renderSize
         )
 
-        // Plage effective après trim
-        let effectiveStart = trimStart
-        let effectiveEnd   = trimEnd ?? duration
+        // Plage effective après trim (bornée à la durée réelle du clip)
+        let effectiveStart = CMTimeMinimum(trimStart, duration)
+        let effectiveEnd   = CMTimeMinimum(trimEnd ?? duration, duration)
+        guard effectiveEnd > effectiveStart else { return }
         let effectiveRange = CMTimeRange(start: effectiveStart, end: effectiveEnd)
 
         // Sous-plages (coupe silence ou plage entière)
@@ -140,6 +221,7 @@ struct VideoAssembler {
 
         let assetAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first
 
+        var isFirstRange = true
         for range in rangesToInsert {
             try videoTrack.insertTimeRange(range, of: assetVideoTrack, at: cursor)
             if let audioTrack, let assetAudioTrack {
@@ -147,7 +229,18 @@ struct VideoAssembler {
             }
 
             let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
-            layerInstruction.setTransform(transform, at: cursor)
+            // Rampe de transition au tout début du clip (zoom punch / whip)
+            let ramp = isFirstRange ? transition.rampDuration : 0
+            if ramp > 0, let startTransform = entryTransform(for: transition, base: transform, renderSize: renderSize) {
+                let rampTime = CMTimeMinimum(CMTime(seconds: ramp, preferredTimescale: 600), range.duration)
+                layerInstruction.setTransformRamp(
+                    fromStart: startTransform,
+                    toEnd: transform,
+                    timeRange: CMTimeRange(start: cursor, duration: rampTime)
+                )
+            } else {
+                layerInstruction.setTransform(transform, at: cursor)
+            }
 
             let instruction = AVMutableVideoCompositionInstruction()
             instruction.timeRange = CMTimeRange(start: cursor, duration: range.duration)
@@ -155,7 +248,50 @@ struct VideoAssembler {
             instructions.append(instruction)
 
             cursor = cursor + range.duration
+            isFirstRange = false
         }
+    }
+
+    /// Transform de départ d'une transition (l'arrivée étant le transform normal).
+    private static func entryTransform(
+        for transition: TransitionStyle,
+        base: CGAffineTransform,
+        renderSize: CGSize
+    ) -> CGAffineTransform? {
+        switch transition {
+        case .none, .flash:
+            return nil
+        case .zoom:
+            // Zoom supplémentaire autour du centre de rendu (se pose vers le transform normal).
+            // scaleAboutCenter(q) = s·q + (1−s)·centre, appliqué après le transform de base.
+            let s: CGFloat = 1.14
+            let cx = renderSize.width / 2, cy = renderSize.height / 2
+            let scaleAboutCenter = CGAffineTransform(a: s, b: 0, c: 0, d: s,
+                                                     tx: (1 - s) * cx, ty: (1 - s) * cy)
+            return base.concatenating(scaleAboutCenter)
+        case .whip:
+            // Glissé horizontal rapide depuis la droite
+            return base.concatenating(CGAffineTransform(translationX: renderSize.width * 0.6, y: 0))
+        }
+    }
+
+    /// Insère une pause noire (trou dans les pistes) couverte par une instruction
+    /// vide — rendue en noir par `AVVideoComposition`. Sert d'entracte entre les
+    /// extraits du hook.
+    private static func insertGap(
+        seconds: Double,
+        color: CGColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1),
+        cursor: inout CMTime,
+        instructions: inout [AVMutableVideoCompositionInstruction]
+    ) {
+        guard seconds > 0 else { return }
+        let duration = CMTime(seconds: seconds, preferredTimescale: 600)
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: cursor, duration: duration)
+        instruction.backgroundColor = color
+        instruction.layerInstructions = []
+        instructions.append(instruction)
+        cursor = cursor + duration
     }
 
     private static func addBackgroundMusic(

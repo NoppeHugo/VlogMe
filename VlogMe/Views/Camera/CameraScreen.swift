@@ -128,14 +128,27 @@ struct CameraScreen: View {
                     .background(.black.opacity(0.45), in: Capsule())
             }
 
-            // Compte à rebours
-            Button { vm.countdownEnabled.toggle() } label: {
-                Text("3s")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(vm.countdownEnabled ? Color.accentOrange : .white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.45), in: Capsule())
+            // Retardateur (réglable : Off / 3s / 5s / 10s)
+            Menu {
+                Picker("Retardateur", selection: Binding(
+                    get: { vm.countdownSeconds },
+                    set: { vm.countdownSeconds = $0 }
+                )) {
+                    ForEach(vm.countdownOptions, id: \.self) { s in
+                        Text(s == 0 ? "Désactivé" : "\(s) s").tag(s)
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "timer")
+                        .font(.caption2.weight(.bold))
+                    Text(vm.countdownEnabled ? "\(vm.countdownSeconds)s" : "Off")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(vm.countdownEnabled ? Color.accentOrange : .white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.45), in: Capsule())
             }
             .disabled(vm.controlsLocked)
             .opacity(vm.controlsLocked ? 0.35 : 1)
