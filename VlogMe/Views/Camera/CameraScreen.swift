@@ -305,6 +305,7 @@ struct CameraScreen: View {
                     .padding(.vertical, 12)
                     .background(.white, in: Capsule())
             }
+            .buttonStyle(PressableScaleStyle())
             .frame(width: 96)
             .opacity(vm.canFinish ? 1 : 0)
             .disabled(!vm.canFinish)
@@ -321,6 +322,7 @@ struct CameraScreen: View {
                 .frame(width: 56, height: 56)
                 .background(.black.opacity(0.35), in: Circle())
         }
+        .buttonStyle(PressableScaleStyle())
         .frame(width: 96)
         .opacity(disabled ? 0.35 : 1)
         .disabled(disabled)
@@ -330,5 +332,18 @@ struct CameraScreen: View {
     private func formatDuration(_ s: Double) -> String {
         let t = Int(s.rounded())
         return t < 60 ? "\(t) s" : String(format: "%d:%02d", t / 60, t % 60)
+    }
+}
+
+/// Enfoncement au toucher façon iOS : léger scale + opacité, ressort réactif,
+/// et un tick haptique discret au contact. Partagé par les contrôles caméra.
+struct PressableScaleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.4),
+                             trigger: configuration.isPressed) { _, pressed in pressed }
     }
 }

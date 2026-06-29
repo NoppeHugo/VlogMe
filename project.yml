@@ -8,7 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"          # mode langage 5 (compilé par le compilateur Swift 6) — voir README
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     GENERATE_INFOPLIST_FILE: NO
 
@@ -32,12 +32,6 @@ targets:
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
     dependencies:
       - package: PostHog
-    entitlements:
-      path: VlogMe/Resources/VlogMe.entitlements
-      properties:
-        com.apple.developer.in-app-payments:
-          - com.hugonoppe.vlogme.pro.monthly
-          - com.hugonoppe.vlogme.pro.annual
   VlogMeWidgetExtension:
     type: app-extension
     platform: iOS
@@ -49,7 +43,7 @@ targets:
         INFOPLIST_FILE: VlogMeWidgetExtension/Info.plist
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: NO
         SKIP_INSTALL: YES
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
 
   VlogMeTests:

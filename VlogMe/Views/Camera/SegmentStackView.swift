@@ -23,6 +23,10 @@ struct SegmentStackView: View {
                             isLast: isLast
                         )
                         .id(segment.id)
+                        .transition(.asymmetric(
+                            insertion: .scale(scale: 0.5).combined(with: .opacity),
+                            removal: .scale(scale: 0.7).combined(with: .opacity)
+                        ))
                         .contextMenu {
                             Button { onTrim(segment) } label: {
                                 Label("Rogner", systemImage: "scissors")
@@ -45,10 +49,13 @@ struct SegmentStackView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .animation(.spring(response: 0.42, dampingFraction: 0.78), value: segments.count)
             }
             .onChange(of: segments.count) { _, _ in
                 if let last = segments.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .trailing) }
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.85)) {
+                        proxy.scrollTo(last.id, anchor: .trailing)
+                    }
                 }
             }
         }
@@ -76,6 +83,7 @@ private struct SegmentThumbnailView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .transition(.opacity.combined(with: .scale(scale: 1.06)))
             } else {
                 Rectangle().fill(.white.opacity(0.12))
                 ProgressView().tint(.white)
@@ -112,8 +120,10 @@ private struct SegmentThumbnailView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isLast ? Color.accentOrange : Color.white.opacity(0.25), lineWidth: isLast ? 2 : 1)
         )
+        .animation(.easeInOut(duration: 0.2), value: isLast)
         .task(id: url) {
-            image = await ThumbnailGenerator.thumbnail(for: url)
+            let loaded = await ThumbnailGenerator.thumbnail(for: url)
+            withAnimation(.easeOut(duration: 0.28)) { image = loaded }
         }
     }
 }
