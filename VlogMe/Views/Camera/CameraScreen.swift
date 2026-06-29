@@ -140,18 +140,31 @@ struct CameraScreen: View {
                     .background(.black.opacity(0.45), in: Capsule())
             }
 
-            // Enregistrer les clips dans la pellicule
-            Button {
-                vm.setSaveClipsToCameraRoll(!vm.saveClipsToCameraRoll)
+            // Réglages rapides : pellicule + démarrage auto
+            Menu {
+                Toggle(isOn: Binding(
+                    get: { vm.saveClipsToCameraRoll },
+                    set: { vm.setSaveClipsToCameraRoll($0) }
+                )) {
+                    Label("Enregistrer les clips dans la pellicule", systemImage: "square.and.arrow.down")
+                }
+                Toggle(isOn: Binding(
+                    get: { vm.autoStartRecording },
+                    set: { vm.setAutoStartRecording($0) }
+                )) {
+                    Label("Filmer dès l'ouverture", systemImage: "bolt.fill")
+                }
             } label: {
-                Image(systemName: vm.saveClipsToCameraRoll ? "square.and.arrow.down.fill" : "square.and.arrow.down")
+                Image(systemName: "slider.horizontal.3")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(vm.saveClipsToCameraRoll ? Color.accentOrange : .white)
+                    .foregroundStyle((vm.saveClipsToCameraRoll || vm.autoStartRecording) ? Color.accentOrange : .white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
             }
-            .accessibilityLabel("Enregistrer les clips dans la pellicule")
+            .disabled(vm.controlsLocked)
+            .opacity(vm.controlsLocked ? 0.35 : 1)
+            .accessibilityLabel("Réglages de capture")
 
             // Retardateur (réglable : Off / 3s / 5s / 10s)
             Menu {

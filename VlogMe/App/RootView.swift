@@ -9,17 +9,9 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var showPreview = false
-    @State private var showSplash = true
 
     var body: some View {
         content
-            .overlay {
-                if showSplash {
-                    SplashView { showSplash = false }
-                        .transition(.opacity)
-                        .zIndex(10)
-                }
-            }
     }
 
     private var content: some View {
