@@ -26,6 +26,14 @@ final class CameraViewModel: ObservableObject {
 
     var countdownEnabled: Bool { countdownSeconds > 0 }
 
+    /// Enregistre chaque clip filmé dans la pellicule (en plus du montage final).
+    /// Désactivé par défaut, réglable et mémorisé entre les sessions.
+    @Published private(set) var saveClipsToCameraRoll: Bool =
+        UserDefaults.standard.bool(forKey: "saveClipsToCameraRoll")
+
+    /// Message transitoire à afficher (ex. accès Photos refusé).
+    @Published var clipSaveNotice: String? = nil
+
     private var cancellables = Set<AnyCancellable>()
     private var timer: AnyCancellable?
     private var maxDurationTimer: AnyCancellable?
@@ -197,6 +205,27 @@ final class CameraViewModel: ObservableObject {
 
     func toggleTorch() { camera.toggleTorch() }
 
+    /// Active/désactive la sauvegarde des clips bruts dans la pellicule.
+    /// À l'activation, demande l'autorisation Photos ; si refusée, on revient à off.
+    func setSaveClipsToCameraRoll(_ on: Bool) {
+        guard on else {
+            saveClipsToCameraRoll = false
+            UserDefaults.standard.set(false, forKey: "saveClipsToCameraRoll")
+            return
+        }
+        Task { @MainActor in
+            if await PhotoSaver.ensureAuthorized() {
+                saveClipsToCameraRoll = true
+                UserDefaults.standard.set(true, forKey: "saveClipsToCameraRoll")
+                impactLight.impactOccurred()
+            } else {
+                saveClipsToCameraRoll = false
+                UserDefaults.standard.set(false, forKey: "saveClipsToCameraRoll")
+                clipSaveNotice = "Autorise l'accès à Photos dans les Réglages pour enregistrer les clips dans la pellicule."
+            }
+        }
+    }
+
     func handlePinchZoom(_ factor: CGFloat) {
         zoomFactor = factor
         camera.setZoom(factor)
@@ -215,6 +244,19 @@ final class CameraViewModel: ObservableObject {
         let segment  = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
         store.append(segment)
         elapsedInCurrentSegment = 0
+
+        // Enregistre le clip brut dans la pellicule si l'option est active.
+        if saveClipsToCameraRoll {
+            Task { [weak self] in
+                do {
+                    try await PhotoSaver.save(url)
+                } catch {
+                    await MainActor.run {
+                        self?.clipSaveNotice = "Ce clip n'a pas pu être enregistré dans la pellicule."
+                    }
+                }
+            }
+        }
 
         if pendingCameraFlip {
             pendingCameraFlip = false

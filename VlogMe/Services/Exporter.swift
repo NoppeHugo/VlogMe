@@ -135,9 +135,16 @@ struct Exporter {
 /// Sauvegarde dans la pellicule (permission « ajout seul »).
 enum PhotoSaver {
 
-    static func save(_ url: URL) async throws {
+    /// Demande (ou rafraîchit) l'autorisation d'ajout à la photothèque.
+    /// `true` si l'app peut écrire dans la pellicule.
+    @discardableResult
+    static func ensureAuthorized() async -> Bool {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard status == .authorized || status == .limited else {
+        return status == .authorized || status == .limited
+    }
+
+    static func save(_ url: URL) async throws {
+        guard await ensureAuthorized() else {
             throw ExportError.photosDenied
         }
         try await PHPhotoLibrary.shared().performChanges {

@@ -77,6 +77,18 @@ struct CameraScreen: View {
                 vm.store.setSegmentTrim(seg.id, start: start, end: end)
             }
         }
+        .alert(
+            "Pellicule",
+            isPresented: Binding(
+                get: { vm.clipSaveNotice != nil },
+                set: { if !$0 { vm.clipSaveNotice = nil } }
+            ),
+            presenting: vm.clipSaveNotice
+        ) { _ in
+            Button("OK", role: .cancel) { vm.clipSaveNotice = nil }
+        } message: { notice in
+            Text(notice)
+        }
     }
 
     // MARK: - Top bar
@@ -127,6 +139,19 @@ struct CameraScreen: View {
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
             }
+
+            // Enregistrer les clips dans la pellicule
+            Button {
+                vm.setSaveClipsToCameraRoll(!vm.saveClipsToCameraRoll)
+            } label: {
+                Image(systemName: vm.saveClipsToCameraRoll ? "square.and.arrow.down.fill" : "square.and.arrow.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(vm.saveClipsToCameraRoll ? Color.accentOrange : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
+            }
+            .accessibilityLabel("Enregistrer les clips dans la pellicule")
 
             // Retardateur (réglable : Off / 3s / 5s / 10s)
             Menu {
