@@ -26,6 +26,22 @@ final class CameraViewModel: ObservableObject {
 
     var countdownEnabled: Bool { countdownSeconds > 0 }
 
+    /// Enregistre chaque clip filmé dans la pellicule (en plus du montage final).
+    /// Désactivé par défaut, réglable et mémorisé entre les sessions.
+    @Published private(set) var saveClipsToCameraRoll: Bool =
+        UserDefaults.standard.bool(forKey: "saveClipsToCameraRoll")
+
+    /// Démarre l'enregistrement automatiquement à l'ouverture de la caméra.
+    /// Désactivé par défaut, réglable et mémorisé entre les sessions.
+    @Published private(set) var autoStartRecording: Bool =
+        UserDefaults.standard.bool(forKey: "autoStartRecording")
+
+    /// Message transitoire à afficher (ex. accès Photos refusé).
+    @Published var clipSaveNotice: String? = nil
+
+    private var didAutoStart = false
+    private var wantsToStart = false
+
     private var cancellables = Set<AnyCancellable>()
     private var timer: AnyCancellable?
     private var maxDurationTimer: AnyCancellable?
@@ -86,10 +102,7 @@ final class CameraViewModel: ObservableObject {
 
         NotificationCenter.default.publisher(for: .vlogmeStartRecording)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self, !self.camera.isRecording else { return }
-                    self.toggleRecording()
-                }
+                Task { @MainActor [weak self] in self?.requestStartRecording() }
             }
             .store(in: &cancellables)
 
@@ -109,6 +122,37 @@ final class CameraViewModel: ObservableObject {
         impactHeavy.prepare()
         impactMedium.prepare()
         impactLight.prepare()
+
+        // Démarrage à la volée : demande explicite (widget / bouton Action) en priorité,
+        // sinon l'option « filmer dès l'ouverture » si c'est la première apparition.
+        if LaunchRouter.shared.consumePendingRecord() {
+            requestStartRecording()
+        } else if autoStartRecording, !didAutoStart, !hasSegments {
+            didAutoStart = true
+            requestStartRecording()
+        }
+    }
+
+    /// Lance l'enregistrement dès que la caméra est prête (gère le lancement à froid).
+    /// Respecte le retardateur s'il est réglé.
+    func requestStartRecording() {
+        guard !camera.isRecording, countdown == nil, !wantsToStart else { return }
+        wantsToStart = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Attend que la session soit configurée (max ~4 s) puis qu'elle tourne.
+            for _ in 0..<80 {
+                if self.camera.isConfigured { break }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard self.wantsToStart, !self.camera.isRecording, self.countdown == nil else {
+                self.wantsToStart = false
+                return
+            }
+            self.wantsToStart = false
+            self.toggleRecording()
+        }
     }
 
     func onDisappear() {
@@ -197,6 +241,34 @@ final class CameraViewModel: ObservableObject {
 
     func toggleTorch() { camera.toggleTorch() }
 
+    /// Active/désactive la sauvegarde des clips bruts dans la pellicule.
+    /// À l'activation, demande l'autorisation Photos ; si refusée, on revient à off.
+    func setSaveClipsToCameraRoll(_ on: Bool) {
+        guard on else {
+            saveClipsToCameraRoll = false
+            UserDefaults.standard.set(false, forKey: "saveClipsToCameraRoll")
+            return
+        }
+        Task { @MainActor in
+            if await PhotoSaver.ensureAuthorized() {
+                saveClipsToCameraRoll = true
+                UserDefaults.standard.set(true, forKey: "saveClipsToCameraRoll")
+                impactLight.impactOccurred()
+            } else {
+                saveClipsToCameraRoll = false
+                UserDefaults.standard.set(false, forKey: "saveClipsToCameraRoll")
+                clipSaveNotice = "Autorise l'accès à Photos dans les Réglages pour enregistrer les clips dans la pellicule."
+            }
+        }
+    }
+
+    /// Active/désactive le démarrage automatique de l'enregistrement à l'ouverture.
+    func setAutoStartRecording(_ on: Bool) {
+        autoStartRecording = on
+        UserDefaults.standard.set(on, forKey: "autoStartRecording")
+        impactLight.impactOccurred()
+    }
+
     func handlePinchZoom(_ factor: CGFloat) {
         zoomFactor = factor
         camera.setZoom(factor)
@@ -216,13 +288,26 @@ final class CameraViewModel: ObservableObject {
         store.append(segment)
         elapsedInCurrentSegment = 0
 
+        // Enregistre le clip brut dans la pellicule si l'option est active.
+        if saveClipsToCameraRoll {
+            Task { [weak self] in
+                do {
+                    try await PhotoSaver.save(url)
+                } catch {
+                    await MainActor.run {
+                        self?.clipSaveNotice = "Ce clip n'a pas pu être enregistré dans la pellicule."
+                    }
+                }
+            }
+        }
+
         if pendingCameraFlip {
             pendingCameraFlip = false
             zoomFactor = 1.0
             camera.switchCamera()
             impactLight.impactOccurred()
             impactLight.prepare()
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: 200_000_000)
             let newURL = store.newSegmentURL()
             camera.startRecording(to: newURL)
             startTimer()

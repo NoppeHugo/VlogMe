@@ -77,6 +77,18 @@ struct CameraScreen: View {
                 vm.store.setSegmentTrim(seg.id, start: start, end: end)
             }
         }
+        .alert(
+            "Pellicule",
+            isPresented: Binding(
+                get: { vm.clipSaveNotice != nil },
+                set: { if !$0 { vm.clipSaveNotice = nil } }
+            ),
+            presenting: vm.clipSaveNotice
+        ) { _ in
+            Button("OK", role: .cancel) { vm.clipSaveNotice = nil }
+        } message: { notice in
+            Text(notice)
+        }
     }
 
     // MARK: - Top bar
@@ -127,6 +139,32 @@ struct CameraScreen: View {
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
             }
+
+            // Réglages rapides : pellicule + démarrage auto
+            Menu {
+                Toggle(isOn: Binding(
+                    get: { vm.saveClipsToCameraRoll },
+                    set: { vm.setSaveClipsToCameraRoll($0) }
+                )) {
+                    Label("Enregistrer les clips dans la pellicule", systemImage: "square.and.arrow.down")
+                }
+                Toggle(isOn: Binding(
+                    get: { vm.autoStartRecording },
+                    set: { vm.setAutoStartRecording($0) }
+                )) {
+                    Label("Filmer dès l'ouverture", systemImage: "bolt.fill")
+                }
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle((vm.saveClipsToCameraRoll || vm.autoStartRecording) ? Color.accentOrange : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
+            }
+            .disabled(vm.controlsLocked)
+            .opacity(vm.controlsLocked ? 0.35 : 1)
+            .accessibilityLabel("Réglages de capture")
 
             // Retardateur (réglable : Off / 3s / 5s / 10s)
             Menu {

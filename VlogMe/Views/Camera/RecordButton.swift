@@ -36,7 +36,7 @@ struct RecordButton: View {
                         width: isRecording ? 34 : 64,
                         height: isRecording ? 34 : 64
                     )
-                    .animation(.spring(response: 0.28, dampingFraction: 0.68), value: isRecording)
+                    .animation(.spring(response: 0.16, dampingFraction: 0.74), value: isRecording)
             }
         }
         .buttonStyle(.plain)

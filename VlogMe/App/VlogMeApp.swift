@@ -23,6 +23,7 @@ struct VlogMeApp: App {
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
                     guard url.scheme == "vlogme", url.host == "record" else { return }
+                    LaunchRouter.shared.setPendingRecord()
                     NotificationCenter.default.post(name: .vlogmeStartRecording, object: nil)
                 }
         }
