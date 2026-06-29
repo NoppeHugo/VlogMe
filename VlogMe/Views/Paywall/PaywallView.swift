@@ -258,10 +258,37 @@ struct PaywallView: View {
     }
 
     private var legalNote: some View {
-        Text("L'abonnement se renouvelle automatiquement. Résiliable à tout moment depuis les Réglages.")
-            .font(.caption2)
-            .foregroundStyle(.white.opacity(0.25))
-            .multilineTextAlignment(.center)
-            .lineSpacing(3)
+        VStack(spacing: 10) {
+            Text(subscriptionDisclosure)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.3))
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+
+            HStack(spacing: 16) {
+                Link("Conditions d'utilisation", destination: Self.termsURL)
+                Text("·").foregroundStyle(.white.opacity(0.2))
+                Link("Confidentialité", destination: Self.privacyURL)
+            }
+            .font(.caption2.weight(.medium))
+            .tint(.white.opacity(0.45))
+        }
     }
+
+    /// Texte de divulgation requis par Apple (Guideline 3.1.2) : titre, durée et prix
+    /// par période de l'abonnement sélectionné, renouvellement auto et résiliation.
+    private var subscriptionDisclosure: String {
+        let base = "L'abonnement VlogMe Pro se renouvelle automatiquement et est facturé via ton compte Apple. Résiliable à tout moment dans les Réglages, au moins 24 h avant la fin de la période."
+        guard let product = entitlements.products.first(where: { $0.id == selectedPlan }) else {
+            return base
+        }
+        let period = product.id == Entitlements.annualID ? "an" : "mois"
+        return "\(product.displayName.isEmpty ? "VlogMe Pro" : product.displayName) — \(product.displayPrice) / \(period). \(base)"
+    }
+}
+
+extension PaywallView {
+    /// ⚠️ À héberger et remplacer par tes vraies pages avant soumission App Store.
+    static let termsURL = URL(string: "https://vlogme.app/terms")!
+    static let privacyURL = URL(string: "https://vlogme.app/privacy")!
 }
