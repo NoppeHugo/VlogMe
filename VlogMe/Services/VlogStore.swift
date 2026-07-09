@@ -27,6 +27,13 @@ final class VlogStore: ObservableObject {
     @Published private(set) var defaultId: UUID?
 
     var activeDraft: VlogDraft? { drafts.first(where: { $0.id == activeId }) }
+
+    // MARK: - Hooks collaboration (posés par CollabSyncService)
+
+    /// Appelé quand un segment est filmé localement dans un vlog partagé (→ upload).
+    var onLocalSegmentAdded: ((VideoSegment, VlogDraft) -> Void)?
+    /// Appelé quand un segment local d'un vlog partagé est supprimé (→ suppression distante).
+    var onLocalSegmentDeleted: ((VideoSegment, VlogDraft) -> Void)?
     var totalDuration: Double { segments.reduce(0) { $0 + $1.durationSeconds } }
     var hasSegments: Bool { !segments.isEmpty }
     var targetDuration: Double? { activeDraft?.targetDuration }
@@ -89,18 +96,29 @@ final class VlogStore: ObservableObject {
         updateActive { $0.segments.append(segment) }
         syncProxy()
         save()
+        if let draft = activeDraft, draft.isShared, segment.isMine {
+            onLocalSegmentAdded?(segment, draft)
+        }
     }
 
+    /// Supprime le dernier segment filmé sur CET appareil (dans un vlog partagé,
+    /// le dernier clip chronologique peut appartenir à un autre participant).
     func removeLast() {
-        guard let last = segments.last else { return }
+        guard let last = segments.last(where: { $0.isMine }) ?? segments.last else { return }
         delete(last)
     }
 
     func delete(_ segment: VideoSegment) {
+        // Dans un vlog partagé, on ne supprime pas le clip d'un autre participant :
+        // il reviendrait à la prochaine synchro et la session doit rester additive.
+        if let draft = activeDraft, draft.isShared, !segment.isMine { return }
         try? FileManager.default.removeItem(at: url(for: segment))
         updateActive { $0.segments.removeAll { $0.id == segment.id } }
         syncProxy()
         save()
+        if let draft = activeDraft, draft.isShared, segment.isMine {
+            onLocalSegmentDeleted?(segment, draft)
+        }
     }
 
     /// Vide les segments du brouillon actif (segments déjà exportés).
@@ -177,6 +195,8 @@ final class VlogStore: ObservableObject {
     }
 
     func moveSegment(from source: IndexSet, to destination: Int) {
+        // L'ordre d'un vlog partagé est chronologique (heure de capture) : pas de réordre manuel.
+        guard activeDraft?.isShared != true else { return }
         updateActive { $0.segments.move(fromOffsets: source, toOffset: destination) }
         syncProxy()
         save()
@@ -277,12 +297,99 @@ final class VlogStore: ObservableObject {
         save()
     }
 
+    // MARK: - Vlog à plusieurs (session partagée)
+
+    /// Marque un brouillon comme partagé (créateur de la session).
+    func markShared(_ id: UUID, zoneName: String) {
+        mutate(id) {
+            $0.isShared = true
+            $0.collabZoneName = zoneName
+            $0.collabOwnerName = nil
+        }
+        syncProxy()
+        save()
+    }
+
+    /// Repasse un brouillon en local (partage arrêté ou invitation révoquée).
+    func markUnshared(_ id: UUID) {
+        mutate(id) {
+            $0.isShared = false
+            $0.collabZoneName = nil
+            $0.collabOwnerName = nil
+        }
+        syncProxy()
+        save()
+    }
+
+    /// Brouillon local rattaché à une zone CloudKit donnée.
+    func draft(collabZoneName: String, ownerName: String?) -> VlogDraft? {
+        drafts.first { $0.collabZoneName == collabZoneName && $0.collabOwnerName == ownerName }
+    }
+
+    /// Crée (ou retrouve) le brouillon miroir d'une session rejointe via une invitation,
+    /// puis l'active pour que l'utilisateur filme directement dedans.
+    @discardableResult
+    func joinSharedDraft(id: UUID, name: String, zoneName: String, ownerName: String) -> VlogDraft {
+        if let existing = drafts.first(where: { $0.id == id }) {
+            mutate(id) {
+                $0.isShared = true
+                $0.collabZoneName = zoneName
+                $0.collabOwnerName = ownerName
+            }
+            activateInternal(id)
+            save()
+            return drafts.first(where: { $0.id == id }) ?? existing
+        }
+        var d = VlogDraft(id: id, name: name)
+        d.isShared = true
+        d.collabZoneName = zoneName
+        d.collabOwnerName = ownerName
+        _ = segmentsDirectory(for: d.id)
+        drafts.append(d)
+        activateInternal(d.id)
+        save()
+        return d
+    }
+
+    /// Applique les changements reçus de CloudKit : ajoute/actualise les segments
+    /// des participants et retire ceux supprimés à distance. Ne redéclenche pas d'upload.
+    func applyRemoteChanges(draftId: UUID, upserts: [VideoSegment], deletedIDs: [UUID]) {
+        guard let idx = drafts.firstIndex(where: { $0.id == draftId }) else { return }
+        for segment in upserts {
+            if let existing = drafts[idx].segments.firstIndex(where: { $0.id == segment.id }) {
+                // Préserve le trim local éventuel sur un segment déjà connu.
+                var updated = segment
+                updated.trimStart = drafts[idx].segments[existing].trimStart
+                updated.trimEnd   = drafts[idx].segments[existing].trimEnd
+                drafts[idx].segments[existing] = updated
+            } else {
+                drafts[idx].segments.append(segment)
+            }
+        }
+        if !deletedIDs.isEmpty {
+            let dir = segmentsDirectory(for: draftId)
+            for segment in drafts[idx].segments where deletedIDs.contains(segment.id) {
+                try? FileManager.default.removeItem(at: dir.appendingPathComponent(segment.fileName))
+            }
+            drafts[idx].segments.removeAll { deletedIDs.contains($0.id) }
+        }
+        if activeId == draftId { syncProxy() }
+        save()
+    }
+
+    /// Tous les brouillons partagés (pour la synchro globale au retour du réseau).
+    var sharedDrafts: [VlogDraft] { drafts.filter { $0.isShared } }
+
     // MARK: - Helpers privés
 
     private func syncProxy() {
         isSyncing = true
         if let draft = activeDraft {
-            segments = draft.segments
+            // Vlog partagé : les clips de tous les participants sont fusionnés
+            // dans l'ordre chronologique réel de capture.
+            segments = draft.isShared
+                ? draft.segments.sorted { $0.sortDate < $1.sortDate }
+                : draft.segments
             aspectRatio = draft.aspectRatio
         } else {
             segments = []

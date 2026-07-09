@@ -45,6 +45,10 @@ final class CameraViewModel: ObservableObject {
     private var timer: AnyCancellable?
     private var maxDurationTimer: AnyCancellable?
     private var segmentStart: Date?
+    /// Instant précis du début d'enregistrement, par nom de fichier : consommé quand
+    /// le fichier est finalisé (l'écriture se termine après l'arrêt, et un nouveau
+    /// segment peut déjà avoir démarré — `segmentStart` seul ne suffit donc pas).
+    private var captureStartsByFile: [String: Date] = [:]
     private var countdownTask: Task<Void, Never>? = nil
 
     private let impactHeavy  = UIImpactFeedbackGenerator(style: .heavy)
@@ -194,6 +198,7 @@ final class CameraViewModel: ObservableObject {
 
     private func startRecordingNow() {
         let url = store.newSegmentURL()
+        captureStartsByFile[url.lastPathComponent] = Date()
         camera.startRecording(to: url)
         startTimer()
         impactHeavy.impactOccurred()
@@ -235,6 +240,7 @@ final class CameraViewModel: ObservableObject {
     func redoLastSegment() {
         store.removeLast()
         let url = store.newSegmentURL()
+        captureStartsByFile[url.lastPathComponent] = Date()
         camera.startRecording(to: url)
         startTimer()
         impactHeavy.impactOccurred()
@@ -286,7 +292,13 @@ final class CameraViewModel: ObservableObject {
         let asset = AVURLAsset(url: url)
         let measured = (try? await asset.load(.duration).seconds) ?? elapsedInCurrentSegment
         let duration = measured.isFinite ? measured : elapsedInCurrentSegment
-        let segment  = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
+        let capturedAt = captureStartsByFile.removeValue(forKey: url.lastPathComponent)
+        let segment  = VideoSegment(
+            fileName: url.lastPathComponent,
+            durationSeconds: duration,
+            facing: camera.facing,
+            capturedAt: capturedAt
+        )
         store.append(segment)
         // Ne remet le compteur à zéro que si aucun nouveau segment n'a déjà démarré.
         if segmentStart == nil { elapsedInCurrentSegment = 0 }

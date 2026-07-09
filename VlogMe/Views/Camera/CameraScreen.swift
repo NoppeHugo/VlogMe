@@ -6,6 +6,7 @@ struct CameraScreen: View {
     @Binding private var showPreview: Bool
     @State private var showLibrary      = false
     @State private var showReorder      = false
+    @State private var showCollab       = false
     @State private var segmentToTrim: VideoSegment? = nil
 
     init(camera: CameraService, store: VlogStore, showPreview: Binding<Bool>) {
@@ -74,6 +75,10 @@ struct CameraScreen: View {
             SegmentReorderSheet()
                 .environmentObject(vm.store)
         }
+        .sheet(isPresented: $showCollab) {
+            CollabSheet()
+                .environmentObject(vm.store)
+        }
         .sheet(item: $segmentToTrim) { seg in
             TrimSheet(segment: seg, url: vm.store.url(for: seg)) { start, end in
                 vm.store.setSegmentTrim(seg.id, start: start, end: end)
@@ -119,6 +124,20 @@ struct CameraScreen: View {
             }
             .disabled(vm.controlsLocked)
             .opacity(vm.controlsLocked ? 0.35 : 1)
+
+            // Vlog à plusieurs
+            Button { showCollab = true } label: {
+                Image(systemName: "person.2\(vm.store.activeDraft?.isShared == true ? ".fill" : "")")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(vm.store.activeDraft?.isShared == true ? Color.accentOrange : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
+                    .expandedTapTarget()
+            }
+            .disabled(vm.controlsLocked)
+            .opacity(vm.controlsLocked ? 0.35 : 1)
+            .accessibilityLabel("Vlog à plusieurs")
 
             // Durée
             VStack(alignment: .leading, spacing: 0) {

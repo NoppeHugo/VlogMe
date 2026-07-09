@@ -30,6 +30,9 @@ enum Analytics {
         case transitionSelected     = "transition_selected"
         case beatSyncToggled        = "beat_sync_toggled"
         case templateApplied        = "template_applied"
+        case collabStarted          = "collab_started"
+        case collabJoined           = "collab_joined"
+        case collabSegmentUploaded  = "collab_segment_uploaded"
     }
 
     private static var isEnabled = false

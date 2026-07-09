@@ -30,6 +30,10 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
+        # Vlog à plusieurs (CloudKit) : décommente la ligne ci-dessous UNE FOIS inscrit à
+        # l'Apple Developer Program (l'entitlement iCloud fait échouer la signature avec
+        # un compte gratuit). Pense aussi à passer VLOGME_COLLAB_ENABLED à true dans Info.plist.
+        # CODE_SIGN_ENTITLEMENTS: VlogMe/Resources/VlogMe.entitlements
     dependencies:
       - package: PostHog
   VlogMeWidgetExtension:
