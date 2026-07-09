@@ -18,7 +18,9 @@ struct CameraScreen: View {
             Color.appBackground.ignoresSafeArea()
 
             CameraPreviewLayerView(
-                session: vm.camera.session,
+                camera: vm.camera,
+                facing: vm.facing,
+                isPiP: vm.isPiP,
                 onTapFocus: { vm.handleTapFocus($0) },
                 onPinchZoom: { vm.handlePinchZoom($0) }
             )
@@ -113,6 +115,7 @@ struct CameraScreen: View {
                             .offset(x: 4, y: -4)
                     }
                 }
+                .expandedTapTarget()
             }
             .disabled(vm.controlsLocked)
             .opacity(vm.controlsLocked ? 0.35 : 1)
@@ -138,6 +141,7 @@ struct CameraScreen: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
+                    .expandedTapTarget()
             }
 
             // Réglages rapides : pellicule + démarrage auto
@@ -161,6 +165,7 @@ struct CameraScreen: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
+                    .expandedTapTarget()
             }
             .disabled(vm.controlsLocked)
             .opacity(vm.controlsLocked ? 0.35 : 1)
@@ -187,6 +192,7 @@ struct CameraScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(.black.opacity(0.45), in: Capsule())
+                .expandedTapTarget()
             }
             .disabled(vm.controlsLocked)
             .opacity(vm.controlsLocked ? 0.35 : 1)
@@ -200,6 +206,7 @@ struct CameraScreen: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(.black.opacity(0.45), in: Capsule())
+                        .expandedTapTarget()
                 }
             }
 
@@ -211,6 +218,7 @@ struct CameraScreen: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
+                    .expandedTapTarget()
             }
             .opacity(vm.controlsLocked ? 0.35 : 1)
             .disabled(vm.controlsLocked)
@@ -271,9 +279,10 @@ struct CameraScreen: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(selected ? Color.accentOrange : Color.black.opacity(0.45), in: Capsule())
+                // Zone tactile élargie autour de la petite capsule.
+                .frame(minWidth: 48, minHeight: 44)
+                .contentShape(Rectangle())
         }
-        .disabled(vm.isRecording)
-        .opacity(vm.isRecording ? 0.4 : 1)
         .animation(.easeInOut(duration: 0.15), value: selected)
         .sensoryFeedback(.selection, trigger: selected)
     }
@@ -281,15 +290,19 @@ struct CameraScreen: View {
     // MARK: - Bottom controls
 
     private var bottomControls: some View {
-        HStack {
-            controlButton(
-                systemImage: vm.isSwitchingCamera
-                    ? "arrow.triangle.2.circlepath.camera.fill"
-                    : "arrow.triangle.2.circlepath.camera",
-                label: "Changer de caméra",
-                disabled: false,
-                action: vm.switchCamera
-            )
+        HStack(alignment: .bottom) {
+            VStack(spacing: 6) {
+                if vm.supportsPiP {
+                    pipButton
+                }
+                controlButton(
+                    systemImage: "arrow.triangle.2.circlepath.camera",
+                    label: "Changer de caméra",
+                    disabled: false,
+                    action: vm.switchCamera
+                )
+            }
+            .frame(width: 96)
 
             Spacer()
 
@@ -304,6 +317,10 @@ struct CameraScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(.white, in: Capsule())
+                    // Zone tactile élargie autour de la capsule ; la hauteur de 96 pt
+                    // aligne son centre sur celui du bouton REC (HStack .bottom).
+                    .frame(minWidth: 96, minHeight: 96)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(PressableScaleStyle())
             .frame(width: 96)
@@ -314,6 +331,21 @@ struct CameraScreen: View {
         .padding(.horizontal, 24)
     }
 
+    /// Mode Duo : incruste la caméra opposée en haut à gauche, même en plein enregistrement.
+    private var pipButton: some View {
+        Button { vm.togglePiP() } label: {
+            Image(systemName: "rectangle.inset.topleft.filled")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(vm.isPiP ? Color.accentOrange : .white)
+                .frame(width: 44, height: 44)
+                .background(.black.opacity(0.35), in: Circle())
+                .frame(width: 64, height: 56)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableScaleStyle())
+        .accessibilityLabel(vm.isPiP ? "Désactiver le mode Duo" : "Activer le mode Duo")
+    }
+
     private func controlButton(systemImage: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
@@ -321,6 +353,10 @@ struct CameraScreen: View {
                 .foregroundStyle(.white)
                 .frame(width: 56, height: 56)
                 .background(.black.opacity(0.35), in: Circle())
+                // Zone tactile élargie au-delà du cercle visible ; la hauteur de 96 pt
+                // aligne son centre sur celui du bouton REC (HStack .bottom).
+                .frame(width: 88, height: 96)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableScaleStyle())
         .frame(width: 96)
@@ -333,6 +369,20 @@ struct CameraScreen: View {
         let t = Int(s.rounded())
         return t < 60 ? "\(t) s" : String(format: "%d:%02d", t / 60, t % 60)
     }
+}
+
+/// Étend la zone tactile d'une pastille compacte à au moins 44 pt de haut,
+/// sans changer son apparence — à appliquer sur le label, à l'intérieur du bouton.
+private struct ExpandedTapTarget: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+    }
+}
+
+private extension View {
+    func expandedTapTarget() -> some View { modifier(ExpandedTapTarget()) }
 }
 
 /// Enfoncement au toucher façon iOS : léger scale + opacité, ressort réactif,

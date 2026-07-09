@@ -11,11 +11,15 @@ struct RecordButton: View {
 
     var body: some View {
         Button(action: action) {
+            // La zone tactile doit être définie sur le label, à l'intérieur du bouton :
+            // appliquée à l'extérieur, elle n'étend pas la zone cliquable. On déborde
+            // volontairement du cadre visuel (110 pt) pour pardonner les taps imprécis.
             RecordButtonFace(isRecording: isRecording)
+                .frame(width: 110, height: 110)
+                .contentShape(Circle())
         }
         .buttonStyle(RecordButtonStyle())
         .frame(width: 96, height: 96)
-        .contentShape(Circle())
         .accessibilityLabel(isRecording ? "Couper le segment" : "Démarrer un segment")
         .accessibilityAddTraits(.startsMediaSession)
         // Confirmation tactile : impact ferme au démarrage, plus doux à l'arrêt.

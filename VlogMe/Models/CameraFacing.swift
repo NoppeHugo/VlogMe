@@ -1,6 +1,7 @@
 import AVFoundation
 
-/// Caméra avant/arrière. Le switch est autorisé entre les segments uniquement (cf. §4).
+/// Caméra avant/arrière. Le switch est possible à tout moment, y compris en plein
+/// enregistrement : le pipeline multicam change de source sans couper le segment.
 enum CameraFacing: String, Codable {
     case back
     case front

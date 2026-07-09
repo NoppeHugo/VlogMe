@@ -11,7 +11,6 @@ final class CameraViewModel: ObservableObject {
 
     @Published private(set) var elapsedInCurrentSegment: Double = 0
     @Published private(set) var zoomFactor: CGFloat = 1.0
-    @Published private(set) var isSwitchingCamera = false
     @Published private(set) var countdown: Int? = nil
     @Published var showGrid = false
 
@@ -46,7 +45,6 @@ final class CameraViewModel: ObservableObject {
     private var timer: AnyCancellable?
     private var maxDurationTimer: AnyCancellable?
     private var segmentStart: Date?
-    private var pendingCameraFlip = false
     private var countdownTask: Task<Void, Never>? = nil
 
     private let impactHeavy  = UIImpactFeedbackGenerator(style: .heavy)
@@ -66,6 +64,8 @@ final class CameraViewModel: ObservableObject {
     var draftCount: Int        { store.drafts.count }
     var zoomPreset: ZoomPreset { camera.zoomPreset }
     var hasUltraWide: Bool     { camera.hasUltraWide }
+    var isPiP: Bool            { camera.isPiPEnabled }
+    var supportsPiP: Bool      { camera.supportsPiP }
 
     var totalDuration: Double { store.totalDuration + elapsedInCurrentSegment }
 
@@ -201,22 +201,24 @@ final class CameraViewModel: ObservableObject {
         Analytics.track(.recordingStarted, ["segment_index": segments.count])
     }
 
+    /// Change de caméra. Grâce au pipeline multicam, la bascule est instantanée et
+    /// ne coupe pas le segment en cours — la vidéo continue dans le même fichier.
     func switchCamera() {
-        if camera.isRecording {
-            pendingCameraFlip = true
-            isSwitchingCamera = true
-            stopTimer()
-            camera.stopRecording()
-        } else {
-            zoomFactor = 1.0
-            camera.switchCamera()
-            impactLight.impactOccurred()
-            impactLight.prepare()
-        }
+        zoomFactor = 1.0
+        camera.switchCamera()
+        impactLight.impactOccurred()
+        impactLight.prepare()
+    }
+
+    /// Active/désactive le mode Duo (caméra opposée incrustée en haut à gauche).
+    /// Utilisable à tout moment, y compris en plein enregistrement.
+    func togglePiP() {
+        camera.setPiP(!camera.isPiPEnabled)
+        impactLight.impactOccurred()
+        impactLight.prepare()
     }
 
     func setZoomPreset(_ preset: ZoomPreset) {
-        guard !camera.isRecording else { return }
         camera.setZoomPreset(preset)
         zoomFactor = 1.0
         impactLight.impactOccurred()
@@ -286,7 +288,8 @@ final class CameraViewModel: ObservableObject {
         let duration = measured.isFinite ? measured : elapsedInCurrentSegment
         let segment  = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
         store.append(segment)
-        elapsedInCurrentSegment = 0
+        // Ne remet le compteur à zéro que si aucun nouveau segment n'a déjà démarré.
+        if segmentStart == nil { elapsedInCurrentSegment = 0 }
 
         // Enregistre le clip brut dans la pellicule si l'option est active.
         if saveClipsToCameraRoll {
@@ -301,18 +304,6 @@ final class CameraViewModel: ObservableObject {
             }
         }
 
-        if pendingCameraFlip {
-            pendingCameraFlip = false
-            zoomFactor = 1.0
-            camera.switchCamera()
-            impactLight.impactOccurred()
-            impactLight.prepare()
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            let newURL = store.newSegmentURL()
-            camera.startRecording(to: newURL)
-            startTimer()
-            isSwitchingCamera = false
-        }
     }
 
     private func startTimer() {
