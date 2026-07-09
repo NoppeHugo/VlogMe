@@ -1,0 +1,102 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "fr_FR",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "8F4A2C7E-3B91-4D65-A0E8-5C2D9B1F6E43",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "fr_FR",
+    "_storefront" : "FRA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "7A1B3C5D",
+      "localizations" : [
+        {
+          "description" : "Export 4K, sans filigrane",
+          "displayName" : "VlogMe Pro",
+          "locale" : "fr_FR"
+        }
+      ],
+      "name" : "VlogMe Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "1A2B3C4D",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Export 4K, sans filigrane",
+              "displayName" : "VlogMe Pro — Mensuel",
+              "locale" : "fr_FR"
+            }
+          ],
+          "productID" : "com.hugonoppe.vlogme.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pro Monthly",
+          "subscriptionGroupID" : "7A1B3C5D",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "29.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5E6F7A8B",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Export 4K, sans filigrane — 12 mois",
+              "displayName" : "VlogMe Pro — Annuel",
+              "locale" : "fr_FR"
+            }
+          ],
+          "productID" : "com.hugonoppe.vlogme.pro.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Pro Annual",
+          "subscriptionGroupID" : "7A1B3C5D",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

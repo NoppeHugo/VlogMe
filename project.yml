@@ -17,6 +17,23 @@ packages:
     url: https://github.com/PostHog/posthog-ios
     from: "3.0.0"
 
+# Schéma explicite pour brancher la boutique simulée (VlogMe.storekit) :
+# les achats Pro fonctionnent en local, sans App Store Connect.
+schemes:
+  VlogMe:
+    build:
+      targets:
+        VlogMe: all
+    run:
+      config: Debug
+      storeKitConfiguration: VlogMe.storekit
+    test:
+      config: Debug
+      targets:
+        - VlogMeTests
+    archive:
+      config: Release
+
 targets:
   VlogMe:
     type: application
