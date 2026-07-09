@@ -4,11 +4,16 @@ import CoreVideo
 import Metal
 
 /// Incruste l'image d'une caméra (`overlay`) dans le coin supérieur gauche de l'autre (`main`)
-/// pour le mode Duo : l'incrustation occupe 40 % de la largeur (≈ 1/6 de la surface),
+/// pour le mode Duo : l'incrustation occupe `windowFraction` de la largeur et de la hauteur,
 /// avec des coins arrondis.
 ///
 /// Utilisé sur la queue vidéo, à la cadence de capture — le rendu passe par Metal.
 final class PiPCompositor {
+
+    /// Fraction de la largeur/hauteur du canevas occupée par l'incrustation.
+    /// Partagée avec la preview live (`CameraPreviewLayerView`) pour que ce que
+    /// l'on voit à l'écran corresponde à la vidéo enregistrée.
+    static let windowFraction: CGFloat = 0.30
 
     private let context: CIContext = {
         if let device = MTLCreateSystemDefaultDevice() {
@@ -33,10 +38,10 @@ final class PiPCompositor {
         let mainImage = CIImage(cvPixelBuffer: main)
         var overlayImage = CIImage(cvPixelBuffer: overlay)
 
-        // Cadre de l'incrustation : 40 % de la largeur, marge ~3,5 %, coin haut-gauche
+        // Cadre de l'incrustation : marge ~3,5 %, coin haut-gauche
         // (le repère Core Image a l'origine en bas à gauche).
-        let pipWidth  = CGFloat(width)  * 0.40
-        let pipHeight = CGFloat(height) * 0.40
+        let pipWidth  = CGFloat(width)  * Self.windowFraction
+        let pipHeight = CGFloat(height) * Self.windowFraction
         let margin    = CGFloat(width)  * 0.035
         let pipRect = CGRect(
             x: margin,
