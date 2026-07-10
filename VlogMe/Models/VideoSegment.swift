@@ -14,6 +14,9 @@ struct VideoSegment: Identifiable, Codable, Equatable {
     let authorID: String?
     /// Nom d'affichage de l'auteur (participant d'un vlog partagé).
     let authorName: String?
+    /// Ville où le clip a été filmé (ex. « Bruxelles »), pour les cartons de
+    /// changement de ville à l'export. `nil` si localisation indisponible.
+    let city: String?
     // Trim (nil = pas de trim appliqué)
     var trimStart: Double?
     var trimEnd: Double?
@@ -27,6 +30,7 @@ struct VideoSegment: Identifiable, Codable, Equatable {
         capturedAt: Date? = nil,
         authorID: String? = nil,
         authorName: String? = nil,
+        city: String? = nil,
         trimStart: Double? = nil,
         trimEnd: Double? = nil
     ) {
@@ -38,6 +42,7 @@ struct VideoSegment: Identifiable, Codable, Equatable {
         self.capturedAt = capturedAt
         self.authorID = authorID
         self.authorName = authorName
+        self.city = city
         self.trimStart = trimStart
         self.trimEnd = trimEnd
     }
@@ -49,7 +54,7 @@ struct VideoSegment: Identifiable, Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, fileName, durationSeconds, facing, createdAt
-        case capturedAt, authorID, authorName
+        case capturedAt, authorID, authorName, city
         case trimStart, trimEnd
     }
 
@@ -63,6 +68,7 @@ struct VideoSegment: Identifiable, Codable, Equatable {
         capturedAt      = try c.decodeIfPresent(Date.self, forKey: .capturedAt)
         authorID        = try c.decodeIfPresent(String.self, forKey: .authorID)
         authorName      = try c.decodeIfPresent(String.self, forKey: .authorName)
+        city            = try c.decodeIfPresent(String.self, forKey: .city)
         trimStart       = try c.decodeIfPresent(Double.self, forKey: .trimStart)
         trimEnd         = try c.decodeIfPresent(Double.self, forKey: .trimEnd)
     }

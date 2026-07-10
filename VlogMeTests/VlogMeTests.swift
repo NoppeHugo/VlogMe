@@ -79,6 +79,36 @@ final class VlogMeTests: XCTestCase {
         XCTAssertTrue(segment.isMine)
     }
 
+    // MARK: - Cartons de ville
+
+    /// Un carton à chaque changement de ville, première ville comprise,
+    /// clips sans ville ignorés sans casser la chaîne.
+    func testCityMarkersOnChanges() {
+        let markers = CityCardRenderer.markers(cityStarts: [
+            (city: "Bruxelles", start: 0),
+            (city: nil,         start: 8),    // localisation manquante → ignoré
+            (city: "Bruxelles", start: 15),
+            (city: "Paris",     start: 30),
+            (city: "Paris",     start: 42),
+            (city: "Bruxelles", start: 60)
+        ])
+        XCTAssertEqual(markers, [
+            CityCardRenderer.Marker(time: 0,  city: "Bruxelles"),
+            CityCardRenderer.Marker(time: 30, city: "Paris"),
+            CityCardRenderer.Marker(time: 60, city: "Bruxelles")
+        ])
+    }
+
+    /// Vlog entier dans la même ville → aucun carton.
+    func testCityMarkersSingleCityShowsNothing() {
+        let markers = CityCardRenderer.markers(cityStarts: [
+            (city: "Bruxelles", start: 0),
+            (city: "Bruxelles", start: 10),
+            (city: nil,         start: 20)
+        ])
+        XCTAssertTrue(markers.isEmpty)
+    }
+
     /// Un brouillon encodé sans les clés de partage se décode en vlog local classique.
     func testVlogDraftDecodesWithoutCollabKeys() throws {
         var draft = VlogDraft(name: "Test")

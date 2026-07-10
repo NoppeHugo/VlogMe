@@ -268,6 +268,13 @@ final class VlogStore: ObservableObject {
         save()
     }
 
+    func setCityCards(_ enabled: Bool, for draftId: UUID? = nil) {
+        let id = draftId ?? activeId
+        guard let id, let idx = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[idx].cityCardsEnabled = enabled
+        save()
+    }
+
     /// Applique un template (pack cohérent) au brouillon actif.
     func applyTemplate(_ template: VlogTemplate) {
         updateActive { d in

@@ -101,6 +101,9 @@ struct PaywallView: View {
             benefitRow(icon: "wand.and.stars", color: .purple,
                        title: "Templates, transitions & stickers",
                        detail: "Packs prêts à l'emploi, flash/zoom/whip, date & lieu.")
+            benefitRow(icon: "mappin.and.ellipse", color: .teal,
+                       title: "Cartons de ville automatiques",
+                       detail: "La ville s'affiche avec style quand ton vlog change d'endroit.")
             benefitRow(icon: "infinity", color: Color.accentOrange,
                        title: "Durée illimitée",
                        detail: "Plus de limite à 2 min — vloggez autant que vous voulez.")

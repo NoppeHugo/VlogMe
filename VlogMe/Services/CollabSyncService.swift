@@ -340,6 +340,9 @@ final class CollabSyncService: ObservableObject {
             record["capturedAt"] = (segment.capturedAt ?? segment.createdAt) as CKRecordValue
             record["authorID"]   = (myRecordName ?? "moi") as CKRecordValue
             record["authorName"] = displayName as CKRecordValue
+            if let city = segment.city {
+                record["city"] = city as CKRecordValue
+            }
             record["video"]      = CKAsset(fileURL: fileURL)
 
             do {
@@ -470,7 +473,8 @@ final class CollabSyncService: ObservableObject {
             createdAt: (record["createdAt"] as? Date) ?? Date(),
             capturedAt: record["capturedAt"] as? Date,
             authorID: authorID ?? "inconnu",
-            authorName: record["authorName"] as? String
+            authorName: record["authorName"] as? String,
+            city: record["city"] as? String
         )
     }
 
