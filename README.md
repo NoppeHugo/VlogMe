@@ -89,6 +89,8 @@ VlogMe/
 - Une session est **purement additive** (chacun n'écrit que ses clips) : aucun conflit possible. On ne peut pas supprimer le clip d'un autre participant.
 
 ### Activation (nécessite l'Apple Developer Program, 99 €/an)
+> 📋 Guide pas-à-pas complet (inscription, Xcode, premier test à deux, pièges) : **[GUIDE-APPLE-DEVELOPER.md](GUIDE-APPLE-DEVELOPER.md)**
+
 La feature est **désactivée par défaut** pour que le projet continue de compiler avec un compte Apple gratuit (l'entitlement iCloud ferait échouer la signature). Une fois inscrit au programme développeur :
 1. Dans `project.yml`, décommente `CODE_SIGN_ENTITLEMENTS: VlogMe/Resources/VlogMe.entitlements` puis relance `xcodegen generate`.
 2. Dans `VlogMe/Resources/Info.plist`, passe `VLOGME_COLLAB_ENABLED` à `true`.

@@ -27,15 +27,31 @@ final class SegmentRecorder {
         self.writer = writer
         self.url = url
 
-        let assistant = AVOutputSettingsAssistant(preset: .preset1920x1080)
+        // HEVC (H.265) plutôt que H.264 : ~2× plus efficace à qualité égale, encodage
+        // matériel sur tous les iPhone iOS 17. Repli H.264 si jamais indisponible.
+        let assistant = AVOutputSettingsAssistant(preset: .hevc1920x1080)
+            ?? AVOutputSettingsAssistant(preset: .preset1920x1080)
 
-        var videoSettings = assistant?.videoSettings ?? [AVVideoCodecKey: AVVideoCodecType.h264]
+        var videoSettings = assistant?.videoSettings ?? [AVVideoCodecKey: AVVideoCodecType.hevc]
         videoSettings[AVVideoWidthKey]  = width
         videoSettings[AVVideoHeightKey] = height
+
+        // Débit plafonné (~6 Mbit/s en 1080p au lieu de ~10 par défaut) : les segments
+        // prennent ≈ 2× moins de place sur disque et s'uploadent 2× plus vite dans les
+        // vlogs partagés, sans perte visible pour du vlog. Keyframe toutes les 2 s.
+        var compression = (videoSettings[AVVideoCompressionPropertiesKey] as? [String: Any]) ?? [:]
+        compression[AVVideoAverageBitRateKey]          = Self.targetBitRate(width: width, height: height)
+        compression[AVVideoExpectedSourceFrameRateKey] = 30
+        compression[AVVideoMaxKeyFrameIntervalKey]     = 60
+        videoSettings[AVVideoCompressionPropertiesKey] = compression
+
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
 
-        audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: assistant?.audioSettings)
+        // Audio AAC 128 kbit/s : largement suffisant pour de la voix + ambiance.
+        var audioSettings = assistant?.audioSettings
+        audioSettings?[AVEncoderBitRateKey] = 128_000
+        audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
         audioInput.expectsMediaDataInRealTime = true
 
         pixelAdaptor = AVAssetWriterInputPixelBufferAdaptor(
@@ -47,6 +63,12 @@ final class SegmentRecorder {
         writer.add(videoInput)
         writer.add(audioInput)
         guard writer.startWriting() else { return nil }
+    }
+
+    /// Débit vidéo cible proportionnel à la surface : ≈ 0,1 bit/pixel/frame à 30 i/s
+    /// (≈ 6,2 Mbit/s en 1080×1920), plancher à 4 Mbit/s.
+    private static func targetBitRate(width: Int, height: Int) -> Int {
+        max(4_000_000, Int(Double(width * height) * 30 * 0.1))
     }
 
     // MARK: - Ajout de frames
