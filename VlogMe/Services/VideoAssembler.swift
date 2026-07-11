@@ -101,7 +101,7 @@ struct VideoAssembler {
                     cursor: &cursor,
                     instructions: &instructions
                 )
-                insertGap(seconds: hook.gap, cursor: &cursor, instructions: &instructions)
+                insertGap(seconds: hook.gap, videoTrack: videoTrack, audioTrack: audioTrack, cursor: &cursor, instructions: &instructions)
             }
         }
 
@@ -115,6 +115,8 @@ struct VideoAssembler {
                 insertGap(
                     seconds: transition.flashDuration,
                     color: CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1),
+                    videoTrack: videoTrack,
+                    audioTrack: audioTrack,
                     cursor: &cursor,
                     instructions: &instructions
                 )
@@ -255,8 +257,17 @@ struct VideoAssembler {
         var isFirstRange = true
         for range in rangesToInsert {
             try videoTrack.insertTimeRange(range, of: assetVideoTrack, at: cursor)
-            if let audioTrack, let assetAudioTrack {
-                try? audioTrack.insertTimeRange(range, of: assetAudioTrack, at: cursor)
+            // La piste audio doit toujours faire la même longueur que la vidéo : un clip
+            // sans son (ou dont l'insertion échoue) reçoit un vide de même durée, sinon
+            // les pistes se désynchronisent et les insertions suivantes débordent.
+            if let audioTrack {
+                let audioRange = CMTimeRange(start: cursor, duration: range.duration)
+                if let assetAudioTrack,
+                   (try? audioTrack.insertTimeRange(range, of: assetAudioTrack, at: cursor)) != nil {
+                    // audio inséré
+                } else {
+                    audioTrack.insertEmptyTimeRange(audioRange)
+                }
             }
 
             let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
@@ -306,19 +317,27 @@ struct VideoAssembler {
         }
     }
 
-    /// Insère une pause noire (trou dans les pistes) couverte par une instruction
-    /// vide — rendue en noir par `AVVideoComposition`. Sert d'entracte entre les
-    /// extraits du hook.
+    /// Insère une pause colorée entre deux clips (entracte du hook, flash de transition).
+    ///
+    /// Point critique : on insère un **vide réel** (`insertEmptyTimeRange`) dans les
+    /// pistes pour qu'elles restent continues. Sinon le curseur avance sans que la
+    /// piste grandisse, et l'insertion du clip suivant se fait au-delà de la durée de
+    /// piste → exception Objective-C non rattrapable = crash de l'export à 0 %.
     private static func insertGap(
         seconds: Double,
         color: CGColor = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1),
+        videoTrack: AVMutableCompositionTrack,
+        audioTrack: AVMutableCompositionTrack?,
         cursor: inout CMTime,
         instructions: inout [AVMutableVideoCompositionInstruction]
     ) {
         guard seconds > 0 else { return }
         let duration = CMTime(seconds: seconds, preferredTimescale: 600)
+        let range = CMTimeRange(start: cursor, duration: duration)
+        videoTrack.insertEmptyTimeRange(range)
+        audioTrack?.insertEmptyTimeRange(range)
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: cursor, duration: duration)
+        instruction.timeRange = range
         instruction.backgroundColor = color
         instruction.layerInstructions = []
         instructions.append(instruction)
