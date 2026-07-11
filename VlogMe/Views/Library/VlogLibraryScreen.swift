@@ -173,6 +173,9 @@ private struct DraftCard: View {
                     icon: "film.stack",
                     text: "\(draft.segments.count) clip\(draft.segments.count == 1 ? "" : "s")"
                 )
+                if draft.isShared {
+                    metaBadge(icon: "person.2.fill", text: "Partagé")
+                }
                 if draft.hasSegments {
                     metaBadge(icon: "clock", text: formatDuration(draft.totalDuration))
                 }

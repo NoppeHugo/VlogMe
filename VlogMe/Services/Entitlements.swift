@@ -99,6 +99,12 @@ final class Entitlements: ObservableObject {
     }
 
     func refreshStatus() async {
+        #if DEBUG
+        // Builds Xcode (DEBUG) : Pro débloqué d'office pour tester l'export
+        // sans produits App Store Connect. Les builds Release gardent le paywall.
+        isPro = true
+        Analytics.setPro(true)
+        #else
         var hasPro = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let tx) = result,
@@ -108,6 +114,7 @@ final class Entitlements: ObservableObject {
         }
         isPro = hasPro
         Analytics.setPro(hasPro)
+        #endif
     }
 
     private func listenForTransactions() -> Task<Void, Never> {

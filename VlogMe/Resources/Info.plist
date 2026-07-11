@@ -15,6 +15,21 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 
+	<!-- Vlog à plusieurs (CloudKit) — passe à true UNIQUEMENT une fois inscrit à
+	     l'Apple Developer Program et l'entitlement iCloud activé (voir README).
+	     À false, la feature est masquée et aucun appel CloudKit n'est fait. -->
+	<key>VLOGME_COLLAB_ENABLED</key>
+	<false/>
+	<!-- Autorise l'app à recevoir les liens d'invitation iCloud (inoffensif tant
+	     que le flag ci-dessus est à false). -->
+	<key>CKSharingSupported</key>
+	<true/>
+	<!-- Push silencieux CloudKit : synchronise dès qu'un participant ajoute un clip. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+
 	<!-- Analytics PostHog — renseigne ta clé projet (laisse vide pour désactiver). -->
 	<key>POSTHOG_API_KEY</key>
 	<string></string>
@@ -30,6 +45,8 @@
 	<string>Pour enregistrer ta vidéo finale dans ta pellicule.</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>VlogMe accède à ta bibliothèque musicale pour ajouter une musique de fond à ton vlog.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>VlogMe mémorise la ville où tu filmes pour afficher un carton stylé quand tu changes d'endroit dans ton vlog.</string>
 
 	<!-- App principalement portrait (vertical 9:16 par défaut). -->
 	<key>UISupportedInterfaceOrientations</key>

@@ -84,12 +84,13 @@ struct CameraPreviewLayerView: UIViewRepresentable {
             guard let backLayer, bounds.width > 0 else { return }
             let full = bounds
 
-            // Cadre de l'incrustation : 40 % de la largeur, sous la barre de contrôles du haut.
+            // Cadre de l'incrustation, sous la barre de contrôles du haut —
+            // même fraction que la vidéo enregistrée (PiPCompositor).
             let pipRect = CGRect(
                 x: 14,
                 y: safeAreaInsets.top + 58,
-                width: full.width * 0.40,
-                height: full.height * 0.40
+                width: full.width * PiPCompositor.windowFraction,
+                height: full.height * PiPCompositor.windowFraction
             )
 
             let mainLayer: AVCaptureVideoPreviewLayer

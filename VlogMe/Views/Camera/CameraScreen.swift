@@ -6,6 +6,7 @@ struct CameraScreen: View {
     @Binding private var showPreview: Bool
     @State private var showLibrary      = false
     @State private var showReorder      = false
+    @State private var showCollab       = false
     @State private var segmentToTrim: VideoSegment? = nil
 
     init(camera: CameraService, store: VlogStore, showPreview: Binding<Bool>) {
@@ -74,6 +75,10 @@ struct CameraScreen: View {
             SegmentReorderSheet()
                 .environmentObject(vm.store)
         }
+        .sheet(isPresented: $showCollab) {
+            CollabSheet()
+                .environmentObject(vm.store)
+        }
         .sheet(item: $segmentToTrim) { seg in
             TrimSheet(segment: seg, url: vm.store.url(for: seg)) { start, end in
                 vm.store.setSegmentTrim(seg.id, start: start, end: end)
@@ -95,135 +100,180 @@ struct CameraScreen: View {
 
     // MARK: - Top bar
 
+    /// Pendant l'enregistrement, la barre se réduit à l'essentiel — chrono, grille,
+    /// torche — au lieu d'afficher les contrôles verrouillés grisés : sur les petits
+    /// écrans, huit capsules écrasaient les textes (chrono et « 9:16 » illisibles).
     private var topBar: some View {
         HStack(spacing: 8) {
-            // Bibliothèque
-            Button { showLibrary = true } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "rectangle.stack")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.45), in: Capsule())
-                    if vm.draftCount > 1 {
-                        Text("\(vm.draftCount)")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.black)
-                            .padding(3)
-                            .background(Color.accentOrange, in: Circle())
-                            .offset(x: 4, y: -4)
-                    }
-                }
-                .expandedTapTarget()
-            }
-            .disabled(vm.controlsLocked)
-            .opacity(vm.controlsLocked ? 0.35 : 1)
-
-            // Durée
-            VStack(alignment: .leading, spacing: 0) {
-                DurationLabel(seconds: vm.totalDuration, isRecording: vm.isRecording)
-                if let remaining = vm.remainingDuration {
-                    Text("→ \(formatDuration(remaining)) restantes")
-                        .font(.system(size: 10, design: .monospaced).weight(.medium))
-                        .foregroundStyle(remaining < 10 ? Color.red.opacity(0.9) : .white.opacity(0.6))
-                        .padding(.leading, 12)
-                }
+            if !vm.isRecording {
+                libraryButton
+                collabButton
             }
 
-            Spacer()
+            durationView
 
-            // Grille
-            Button { vm.showGrid.toggle() } label: {
-                Image(systemName: vm.showGrid ? "grid" : "grid")
+            Spacer(minLength: 8)
+
+            gridButton
+            if !vm.isRecording {
+                quickSettingsMenu
+                countdownMenu
+            }
+            torchButton
+            if !vm.isRecording {
+                aspectButton
+            }
+        }
+        .padding(.horizontal, 16)
+        .animation(.easeInOut(duration: 0.2), value: vm.isRecording)
+    }
+
+    // Durée totale + restant éventuel. `layoutPriority` + `fixedSize` : le chrono ne
+    // doit jamais être compressé ou passé à la ligne par les autres capsules.
+    private var durationView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            DurationLabel(seconds: vm.totalDuration, isRecording: vm.isRecording)
+            if let remaining = vm.remainingDuration {
+                Text("→ \(formatDuration(remaining)) restantes")
+                    .font(.system(size: 10, design: .monospaced).weight(.medium))
+                    .foregroundStyle(remaining < 10 ? Color.red.opacity(0.9) : .white.opacity(0.6))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.leading, 12)
+            }
+        }
+        .layoutPriority(1)
+    }
+
+    private var libraryButton: some View {
+        Button { showLibrary = true } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "rectangle.stack")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(vm.showGrid ? Color.accentOrange : .white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.45), in: Capsule())
-                    .expandedTapTarget()
-            }
-
-            // Réglages rapides : pellicule + démarrage auto
-            Menu {
-                Toggle(isOn: Binding(
-                    get: { vm.saveClipsToCameraRoll },
-                    set: { vm.setSaveClipsToCameraRoll($0) }
-                )) {
-                    Label("Enregistrer les clips dans la pellicule", systemImage: "square.and.arrow.down")
-                }
-                Toggle(isOn: Binding(
-                    get: { vm.autoStartRecording },
-                    set: { vm.setAutoStartRecording($0) }
-                )) {
-                    Label("Filmer dès l'ouverture", systemImage: "bolt.fill")
-                }
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle((vm.saveClipsToCameraRoll || vm.autoStartRecording) ? Color.accentOrange : .white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.45), in: Capsule())
-                    .expandedTapTarget()
-            }
-            .disabled(vm.controlsLocked)
-            .opacity(vm.controlsLocked ? 0.35 : 1)
-            .accessibilityLabel("Réglages de capture")
-
-            // Retardateur (réglable : Off / 3s / 5s / 10s)
-            Menu {
-                Picker("Retardateur", selection: Binding(
-                    get: { vm.countdownSeconds },
-                    set: { vm.countdownSeconds = $0 }
-                )) {
-                    ForEach(vm.countdownOptions, id: \.self) { s in
-                        Text(s == 0 ? "Désactivé" : "\(s) s").tag(s)
-                    }
-                }
-            } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "timer")
-                        .font(.caption2.weight(.bold))
-                    Text(vm.countdownEnabled ? "\(vm.countdownSeconds)s" : "Off")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .foregroundStyle(vm.countdownEnabled ? Color.accentOrange : .white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.black.opacity(0.45), in: Capsule())
-                .expandedTapTarget()
-            }
-            .disabled(vm.controlsLocked)
-            .opacity(vm.controlsLocked ? 0.35 : 1)
-
-            // Torche
-            if vm.facing == .back {
-                Button { vm.toggleTorch() } label: {
-                    Image(systemName: vm.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(vm.isTorchOn ? Color.accentOrange : .white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.45), in: Capsule())
-                        .expandedTapTarget()
-                }
-            }
-
-            // Format
-            Button { vm.toggleAspect() } label: {
-                Text(vm.aspectRatio.label)
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.45), in: Capsule())
+                if vm.draftCount > 1 {
+                    Text("\(vm.draftCount)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.black)
+                        .padding(3)
+                        .background(Color.accentOrange, in: Circle())
+                        .offset(x: 4, y: -4)
+                }
+            }
+            .expandedTapTarget()
+        }
+    }
+
+    private var collabButton: some View {
+        Button { showCollab = true } label: {
+            Image(systemName: "person.2\(vm.store.activeDraft?.isShared == true ? ".fill" : "")")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(vm.store.activeDraft?.isShared == true ? Color.accentOrange : .white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.45), in: Capsule())
+                .expandedTapTarget()
+        }
+        .accessibilityLabel("Vlog à plusieurs")
+    }
+
+    private var gridButton: some View {
+        Button { vm.showGrid.toggle() } label: {
+            Image(systemName: "grid")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(vm.showGrid ? Color.accentOrange : .white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.45), in: Capsule())
+                .expandedTapTarget()
+        }
+    }
+
+    // Réglages rapides : pellicule + démarrage auto
+    private var quickSettingsMenu: some View {
+        Menu {
+            Toggle(isOn: Binding(
+                get: { vm.saveClipsToCameraRoll },
+                set: { vm.setSaveClipsToCameraRoll($0) }
+            )) {
+                Label("Enregistrer les clips dans la pellicule", systemImage: "square.and.arrow.down")
+            }
+            Toggle(isOn: Binding(
+                get: { vm.autoStartRecording },
+                set: { vm.setAutoStartRecording($0) }
+            )) {
+                Label("Filmer dès l'ouverture", systemImage: "bolt.fill")
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle((vm.saveClipsToCameraRoll || vm.autoStartRecording) ? Color.accentOrange : .white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.45), in: Capsule())
+                .expandedTapTarget()
+        }
+        .accessibilityLabel("Réglages de capture")
+    }
+
+    // Retardateur (réglable : Off / 3s / 5s / 10s)
+    private var countdownMenu: some View {
+        Menu {
+            Picker("Retardateur", selection: Binding(
+                get: { vm.countdownSeconds },
+                set: { vm.countdownSeconds = $0 }
+            )) {
+                ForEach(vm.countdownOptions, id: \.self) { s in
+                    Text(s == 0 ? "Désactivé" : "\(s) s").tag(s)
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "timer")
+                    .font(.caption2.weight(.bold))
+                Text(vm.countdownEnabled ? "\(vm.countdownSeconds)s" : "Off")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .foregroundStyle(vm.countdownEnabled ? Color.accentOrange : .white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.45), in: Capsule())
+            .expandedTapTarget()
+        }
+    }
+
+    @ViewBuilder
+    private var torchButton: some View {
+        if vm.facing == .back {
+            Button { vm.toggleTorch() } label: {
+                Image(systemName: vm.isTorchOn ? "bolt.fill" : "bolt.slash.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(vm.isTorchOn ? Color.accentOrange : .white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
                     .expandedTapTarget()
             }
-            .opacity(vm.controlsLocked ? 0.35 : 1)
-            .disabled(vm.controlsLocked)
         }
-        .padding(.horizontal, 16)
+    }
+
+    private var aspectButton: some View {
+        Button { vm.toggleAspect() } label: {
+            Text(vm.aspectRatio.label)
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.45), in: Capsule())
+                .expandedTapTarget()
+        }
     }
 
     // MARK: - Progress bar durée cible

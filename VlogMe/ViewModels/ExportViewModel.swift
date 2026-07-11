@@ -42,6 +42,8 @@ final class ExportViewModel: ObservableObject {
     @Published var stickerStyle: StickerStyle
     // Beat-sync
     @Published var beatSyncEnabled: Bool
+    // Cartons de ville (la ville s'affiche 3 s à chaque changement)
+    @Published var cityCardsEnabled: Bool
 
     private let store: VlogStore
     private let entitlements: Entitlements
@@ -68,7 +70,21 @@ final class ExportViewModel: ObservableObject {
         self.stickerPosition = store.activeDraft?.stickerPosition ?? .topLeading
         self.stickerStyle = store.activeDraft?.stickerStyle ?? .pill
         self.beatSyncEnabled = store.activeDraft?.beatSyncEnabled ?? false
+        self.cityCardsEnabled = store.activeDraft?.cityCardsEnabled ?? true
     }
+
+    /// Villes distinctes traversées par le vlog, dans l'ordre du montage
+    /// (pour l'aperçu « Bruxelles → Paris » et l'activation du toggle).
+    var citiesCrossed: [String] {
+        var result: [String] = []
+        for segment in store.segments {
+            guard let city = segment.city, !city.isEmpty else { continue }
+            if result.last != city { result.append(city) }
+        }
+        return result
+    }
+
+    var hasCityChange: Bool { Set(citiesCrossed).count >= 2 }
 
     var resolutionLabel: String { entitlements.exportResolution.label }
     var isPro: Bool { entitlements.isPro }
@@ -156,6 +172,12 @@ final class ExportViewModel: ObservableObject {
         Analytics.track(.beatSyncToggled, ["enabled": enabled])
     }
 
+    func setCityCards(_ enabled: Bool) {
+        cityCardsEnabled = enabled
+        store.setCityCards(enabled)
+        Analytics.track(.cityCardsToggled, ["enabled": enabled])
+    }
+
     /// Applique un template et resynchronise l'état local.
     func applyTemplate(_ template: VlogTemplate) {
         store.applyTemplate(template)
@@ -187,7 +209,8 @@ final class ExportViewModel: ObservableObject {
             SegmentClip(
                 url: store.url(for: seg),
                 trimStart: CMTime(seconds: seg.trimStart ?? 0, preferredTimescale: 600),
-                trimEnd: seg.trimEnd.map { CMTime(seconds: $0, preferredTimescale: 600) }
+                trimEnd: seg.trimEnd.map { CMTime(seconds: $0, preferredTimescale: 600) },
+                city: seg.city
             )
         }
         guard !clips.isEmpty else {
@@ -252,6 +275,7 @@ final class ExportViewModel: ObservableObject {
                 transition: transition,
                 outroURL: outroURL,
                 stickerLayer: stickerLayer,
+                cityCardsEnabled: cityCardsEnabled,
                 musicURL: musicURL,
                 musicVolume: musicVolume
             )
@@ -279,7 +303,8 @@ final class ExportViewModel: ObservableObject {
                 "transition": transition.rawValue,
                 "outro_enabled": outroEnabled,
                 "sticker_enabled": stickerEnabled,
-                "beat_sync": beatSyncEnabled
+                "beat_sync": beatSyncEnabled,
+                "city_cards": cityCardsEnabled && hasCityChange
             ])
         } catch {
             state = .failed(error.localizedDescription)

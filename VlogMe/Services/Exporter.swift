@@ -42,10 +42,9 @@ struct Exporter {
             .appendingPathComponent("VlogMe-\(UUID().uuidString).mp4")
         try? FileManager.default.removeItem(at: tempURL)
 
-        guard let session = AVAssetExportSession(
-            asset: composition,
-            presetName: AVAssetExportPresetHighestQuality
-        ) else { throw ExportError.cannotCreateSession }
+        guard let session = makeSession(asset: composition) else {
+            throw ExportError.cannotCreateSession
+        }
 
         session.outputURL        = tempURL
         session.outputFileType   = .mp4
@@ -94,10 +93,9 @@ struct Exporter {
             request.finish(with: output, context: nil)
         }
 
-        guard let session = AVAssetExportSession(
-            asset: asset,
-            presetName: AVAssetExportPresetHighestQuality
-        ) else { throw ExportError.cannotCreateSession }
+        guard let session = makeSession(asset: asset) else {
+            throw ExportError.cannotCreateSession
+        }
 
         session.outputURL        = outputURL
         session.outputFileType   = .mp4
@@ -116,7 +114,14 @@ struct Exporter {
         return outputURL
     }
 
-    // MARK: - Helper
+    // MARK: - Helpers
+
+    /// HEVC en priorité (fichier ~2× plus léger à qualité égale, accepté par
+    /// Photos/Instagram/TikTok), repli H.264 si l'encodeur HEVC est indisponible.
+    private static func makeSession(asset: AVAsset) -> AVAssetExportSession? {
+        AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHEVCHighestQuality)
+            ?? AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality)
+    }
 
     private static func runSession(_ session: AVAssetExportSession) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in

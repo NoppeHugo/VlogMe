@@ -103,6 +103,7 @@ struct ExportSheet: View {
                         hookSection
                         transitionSection
                         stickerSection
+                        citySection
                     }
 
                     // Silence automatique
@@ -482,6 +483,43 @@ struct ExportSheet: View {
                     }
                     .padding(.horizontal, 2)
                 }
+            }
+        }
+    }
+
+    // MARK: - Cartons de ville
+
+    private var citySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: Binding(
+                get: { vm.cityCardsEnabled },
+                set: { vm.setCityCards($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text("Cartons de ville")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.caption2)
+                            .foregroundStyle(Color.accentOrange)
+                    }
+                    Text(vm.hasCityChange
+                         ? vm.citiesCrossed.joined(separator: " → ")
+                         : "La ville s'affiche 3 s quand tu changes d'endroit entre deux clips")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(2)
+                }
+            }
+            .tint(Color.accentOrange)
+            .disabled(!vm.hasCityChange)
+            .opacity(vm.hasCityChange ? 1 : 0.6)
+
+            if !vm.hasCityChange {
+                Text("Aucun changement de ville détecté dans ce vlog.")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.35))
             }
         }
     }

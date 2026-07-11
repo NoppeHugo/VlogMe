@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Vlog à plusieurs (CloudKit). Nécessite l'Apple Developer Program (99 €/an).
+	     Pour activer : décommente la ligne CODE_SIGN_ENTITLEMENTS dans project.yml
+	     et passe VLOGME_COLLAB_ENABLED à true dans Info.plist (voir README §Vlog à plusieurs). -->
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.hugonoppe.vlogme</string>
+	</array>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

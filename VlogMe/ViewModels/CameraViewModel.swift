@@ -45,6 +45,15 @@ final class CameraViewModel: ObservableObject {
     private var timer: AnyCancellable?
     private var maxDurationTimer: AnyCancellable?
     private var segmentStart: Date?
+    /// Contexte capturé au démarrage de chaque clip (instant précis + ville),
+    /// par nom de fichier : consommé quand le fichier est finalisé (l'écriture se
+    /// termine après l'arrêt, et un nouveau segment peut déjà avoir démarré —
+    /// `segmentStart` seul ne suffit donc pas).
+    private struct CaptureContext {
+        let start: Date
+        let city: String?
+    }
+    private var captureContextsByFile: [String: CaptureContext] = [:]
     private var countdownTask: Task<Void, Never>? = nil
 
     private let impactHeavy  = UIImpactFeedbackGenerator(style: .heavy)
@@ -118,6 +127,9 @@ final class CameraViewModel: ObservableObject {
     func onAppear() {
         camera.configure()
         camera.start()
+        // Suivi de la ville courante (échelle ville, batterie négligeable) pour
+        // les cartons de changement de ville.
+        LocationService.shared.start()
         // Re-prépare après un retour en premier plan
         impactHeavy.prepare()
         impactMedium.prepare()
@@ -156,7 +168,10 @@ final class CameraViewModel: ObservableObject {
     }
 
     func onDisappear() {
-        if !camera.isRecording { camera.stop() }
+        if !camera.isRecording {
+            camera.stop()
+            LocationService.shared.stop()
+        }
     }
 
     // MARK: - Actions
@@ -194,6 +209,10 @@ final class CameraViewModel: ObservableObject {
 
     private func startRecordingNow() {
         let url = store.newSegmentURL()
+        captureContextsByFile[url.lastPathComponent] = CaptureContext(
+            start: Date(),
+            city: LocationService.shared.currentCity
+        )
         camera.startRecording(to: url)
         startTimer()
         impactHeavy.impactOccurred()
@@ -235,6 +254,10 @@ final class CameraViewModel: ObservableObject {
     func redoLastSegment() {
         store.removeLast()
         let url = store.newSegmentURL()
+        captureContextsByFile[url.lastPathComponent] = CaptureContext(
+            start: Date(),
+            city: LocationService.shared.currentCity
+        )
         camera.startRecording(to: url)
         startTimer()
         impactHeavy.impactOccurred()
@@ -286,7 +309,14 @@ final class CameraViewModel: ObservableObject {
         let asset = AVURLAsset(url: url)
         let measured = (try? await asset.load(.duration).seconds) ?? elapsedInCurrentSegment
         let duration = measured.isFinite ? measured : elapsedInCurrentSegment
-        let segment  = VideoSegment(fileName: url.lastPathComponent, durationSeconds: duration, facing: camera.facing)
+        let context = captureContextsByFile.removeValue(forKey: url.lastPathComponent)
+        let segment  = VideoSegment(
+            fileName: url.lastPathComponent,
+            durationSeconds: duration,
+            facing: camera.facing,
+            capturedAt: context?.start,
+            city: context?.city
+        )
         store.append(segment)
         // Ne remet le compteur à zéro que si aucun nouveau segment n'a déjà démarré.
         if segmentStart == nil { elapsedInCurrentSegment = 0 }

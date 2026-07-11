@@ -18,6 +18,7 @@ struct SegmentClip {
     let url: URL
     let trimStart: CMTime    // .zero = pas de trim début
     let trimEnd: CMTime?     // nil = jusqu'à la fin
+    var city: String? = nil  // ville de tournage (cartons de changement de ville)
 }
 
 /// Réglages du montage « hook » (tendance TikTok) : un aperçu rapide des premiers
@@ -45,6 +46,7 @@ struct VideoAssembler {
         transition: TransitionStyle = .none,
         outroURL: URL? = nil,
         stickerLayer: CALayer? = nil,
+        cityCardsEnabled: Bool = false,
         musicURL: URL? = nil,
         musicVolume: Float = 0.3
     ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition, audioMix: AVMutableAudioMix?) {
@@ -102,6 +104,9 @@ struct VideoAssembler {
         }
 
         // Segments principaux (avec transitions entre clips)
+        // On note l'instant réel de début de chaque clip dans la composition
+        // (après intro/hook/coupes) pour placer les cartons de ville.
+        var cityStarts: [(city: String?, start: Double)] = []
         for (index, clip) in clips.enumerated() {
             // Flash blanc juste avant le clip (sauf le tout premier)
             if index > 0, transition.flashDuration > 0 {
@@ -112,6 +117,7 @@ struct VideoAssembler {
                     instructions: &instructions
                 )
             }
+            cityStarts.append((city: clip.city, start: cursor.seconds))
             try await insertClip(
                 url: clip.url,
                 trimStart: clip.trimStart,
@@ -148,14 +154,24 @@ struct VideoAssembler {
         videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.instructions = instructions
 
-        // Sticker date / lieu incrusté sur tout le vlog (export uniquement)
-        if let stickerLayer {
+        // Incrustations Core Animation (export uniquement) : sticker date/lieu
+        // sur tout le vlog + cartons animés à chaque changement de ville.
+        var overlayLayers: [CALayer] = []
+        if let stickerLayer { overlayLayers.append(stickerLayer) }
+        if cityCardsEnabled,
+           let cityLayer = CityCardRenderer.makeLayer(
+               markers: CityCardRenderer.markers(cityStarts: cityStarts),
+               renderSize: renderSize
+           ) {
+            overlayLayers.append(cityLayer)
+        }
+        if !overlayLayers.isEmpty {
             let videoLayer = CALayer()
             videoLayer.frame = CGRect(origin: .zero, size: renderSize)
             let parentLayer = CALayer()
             parentLayer.frame = CGRect(origin: .zero, size: renderSize)
             parentLayer.addSublayer(videoLayer)
-            parentLayer.addSublayer(stickerLayer)
+            overlayLayers.forEach { parentLayer.addSublayer($0) }
             videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
                 postProcessingAsVideoLayer: videoLayer,
                 in: parentLayer

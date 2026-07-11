@@ -15,7 +15,11 @@ struct DurationLabel: View {
             Text(formatted)
                 .font(.system(.subheadline, design: .monospaced).weight(.semibold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
         }
+        // Jamais compressé par les vues voisines : le chrono doit rester lisible
+        // même quand la barre est chargée (cf. bug d'affichage en enregistrement).
+        .fixedSize()
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.black.opacity(0.45), in: Capsule())

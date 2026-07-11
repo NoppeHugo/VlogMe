@@ -39,8 +39,17 @@ struct VlogDraft: Identifiable, Codable {
     // MARK: - Beat-sync (cale le hook sur les temps de la musique)
     var beatSyncEnabled: Bool
 
-    init(name: String = "") {
-        id = UUID()
+    // MARK: - Cartons de ville (la ville s'affiche 3 s à chaque changement)
+    var cityCardsEnabled: Bool
+
+    // MARK: - Vlog à plusieurs (session partagée CloudKit)
+    var isShared: Bool                   // true = les segments se synchronisent entre participants
+    var collabZoneName: String?          // nom de la zone CloudKit ("vlog-<uuid>")
+    var collabOwnerName: String?         // record name du propriétaire de la zone ; nil = moi
+    var maxParticipants: Int             // limite de participants affichée/contrôlée par le créateur
+
+    init(id: UUID = UUID(), name: String = "") {
+        self.id = id
         let f = DateFormatter()
         f.dateFormat = "d MMM"
         f.locale = Locale(identifier: "fr_FR")
@@ -69,6 +78,13 @@ struct VlogDraft: Identifiable, Codable {
         stickerPosition = .topLeading
         stickerStyle = .pill
         beatSyncEnabled = false
+        // Activé par défaut : n'apparaît de toute façon que si le vlog traverse
+        // au moins deux villes différentes.
+        cityCardsEnabled = true
+        isShared = false
+        collabZoneName = nil
+        collabOwnerName = nil
+        maxParticipants = 4
     }
 
     // MARK: - Decodable rétro-compatible
@@ -83,7 +99,8 @@ struct VlogDraft: Identifiable, Codable {
         case introStyle, introText, introSubtitle, hookEnabled, hookGap
         case transition, outroEnabled, outroText, outroSubtitle
         case stickerEnabled, stickerText, stickerShowDate, stickerPosition, stickerStyle
-        case beatSyncEnabled
+        case beatSyncEnabled, cityCardsEnabled
+        case isShared, collabZoneName, collabOwnerName, maxParticipants
     }
 
     init(from decoder: Decoder) throws {
@@ -114,8 +131,16 @@ struct VlogDraft: Identifiable, Codable {
         stickerPosition       = try c.decodeIfPresent(StickerPosition.self, forKey: .stickerPosition) ?? .topLeading
         stickerStyle          = try c.decodeIfPresent(StickerStyle.self, forKey: .stickerStyle) ?? .pill
         beatSyncEnabled       = try c.decodeIfPresent(Bool.self, forKey: .beatSyncEnabled) ?? false
+        cityCardsEnabled      = try c.decodeIfPresent(Bool.self, forKey: .cityCardsEnabled) ?? true
+        isShared              = try c.decodeIfPresent(Bool.self, forKey: .isShared) ?? false
+        collabZoneName        = try c.decodeIfPresent(String.self, forKey: .collabZoneName)
+        collabOwnerName       = try c.decodeIfPresent(String.self, forKey: .collabOwnerName)
+        maxParticipants       = try c.decodeIfPresent(Int.self, forKey: .maxParticipants) ?? 4
     }
 
     var totalDuration: Double { segments.reduce(0) { $0 + $1.effectiveDuration } }
     var hasSegments: Bool { !segments.isEmpty }
+
+    /// Je suis le créateur de la session partagée (la zone CloudKit vit dans MA base privée).
+    var isCollabOwner: Bool { isShared && collabOwnerName == nil }
 }

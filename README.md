@@ -13,6 +13,8 @@ Ce dépôt contient le **socle de code des Phases 1 → 3** de la roadmap (cf. c
 | 5 — Monétisation (RevenueCat) | Paywall, limites freemium | ⬜ à venir |
 | **Signature — Intro stylée & Hook** | Carton d'intro animé (`IntroGenerator`, 5 styles, titre + sous-titre éditables) inséré au début ; montage « hook » TikTok (extraits des 1ers clips, pause 0,1–0,2 s) ; retardateur caméra réglable (Off/3/5/10 s) | ✅ codé |
 | **Signature — Montage pro** | Templates 1-tap (`VlogTemplate`), transitions flash/zoom/whip (rampes de transform), outro/CTA assorti à l'intro, beat-sync du hook (`BeatDetector`, autocorrélation Accelerate), sticker date/lieu (`StickerRenderer` + `AVVideoCompositionCoreAnimationTool`) | ✅ codé |
+| **Vlog à plusieurs** | Sessions partagées CloudKit (`CollabSyncService`) : horodatage précis des clips, file d'upload hors-ligne (sync auto au retour du réseau), fusion chronologique multi-participants, invitations privées par lien iCloud | ✅ codé — ⚠️ activation manuelle, voir §Vlog à plusieurs |
+| **Cartons de ville** | La ville de tournage est mémorisée sur chaque clip (`LocationService`, géocodage léger) ; à l'export, un carton animé de 3 s (`CityCardRenderer`) s'affiche à chaque changement de ville — activable dans la feuille d'export | ✅ codé |
 
 > ⚠️ **Code non compilé ici.** Il a été scaffoldé hors Mac/Xcode (environnement Linux). Attends-toi à de petits ajustements de compilation au premier build sur ton Mac — c'est normal. Le point le plus susceptible de demander un réglage sur device réel est la **transform d'aspect-fill** dans `VideoAssembler.swift` (cadrage des segments), identifié comme délicat dans le cahier des charges (§11).
 
@@ -78,6 +80,25 @@ VlogMe/
 - `OutroGenerator` rend à la volée un clip noir « VlogMe » de 3 s (via `AVAssetWriter`), à la taille exacte de la composition, mis en cache. Concaténé en fin de vlog **uniquement en gratuit**.
 - `PhotoSaver` écrit dans la pellicule (permission *add-only*) ; `ShareSheet` ouvre la share sheet iOS native.
 - `Entitlements` (stub) pilote outro + résolution. La **4K réelle suppose une capture en 4K** (`sessionPreset = .hd4K3840x2160`) à activer côté `CameraService` en Phase 5 ; aujourd'hui le `renderSize` est mis à l'échelle mais la source caméra reste en `.high`.
+
+## Vlog à plusieurs (sessions partagées CloudKit)
+
+### Comment ça marche
+- Chaque vlog partagé vit dans une **zone CloudKit dédiée** (`vlog-<uuid>`) de la base privée du créateur, partagée aux invités via un **`CKShare` de zone** (lien d'invitation privé envoyé par iMessage). Pas de serveur à gérer, pas de compte à créer : les participants sont identifiés par leur iCloud.
+- Chaque clip mémorise **l'instant exact du début d'enregistrement** (`VideoSegment.capturedAt`). Au montage, les clips de tous les participants sont fusionnés **dans l'ordre chronologique réel** — filmer hors connexion ne pose aucun problème.
+- Les clips filmés sans réseau partent dans une **file d'upload persistée** (`collab_sync_state.json`) qui se vide automatiquement dès que la connexion revient (`NWPathMonitor`). La réception utilise les changements incrémentaux de zone (`recordZoneChanges`) + un **push silencieux CloudKit** quand l'app tourne.
+- Une session est **purement additive** (chacun n'écrit que ses clips) : aucun conflit possible. On ne peut pas supprimer le clip d'un autre participant.
+
+### Activation (nécessite l'Apple Developer Program, 99 €/an)
+> 📋 Guide pas-à-pas complet (inscription, Xcode, premier test à deux, pièges) : **[GUIDE-APPLE-DEVELOPER.md](GUIDE-APPLE-DEVELOPER.md)**
+
+La feature est **désactivée par défaut** pour que le projet continue de compiler avec un compte Apple gratuit (l'entitlement iCloud ferait échouer la signature). Une fois inscrit au programme développeur :
+1. Dans `project.yml`, décommente `CODE_SIGN_ENTITLEMENTS: VlogMe/Resources/VlogMe.entitlements` puis relance `xcodegen generate`.
+2. Dans `VlogMe/Resources/Info.plist`, passe `VLOGME_COLLAB_ENABLED` à `true`.
+3. Dans Xcode → Signing & Capabilities, vérifie que la capability **iCloud → CloudKit** apparaît avec le container `iCloud.com.hugonoppe.vlogme` (créé automatiquement à la première signature).
+4. Premier lancement : filme un clip dans un vlog partagé pour que CloudKit crée le schéma (`CollabSegment`) en environnement Development. Avant de publier, déploie le schéma en Production depuis le [CloudKit Dashboard](https://icloud.developer.apple.com).
+
+Tant que `VLOGME_COLLAB_ENABLED` est à `false`, le bouton « Vlog à plusieurs » affiche un écran « Bientôt disponible » et **aucun appel CloudKit n'est fait**.
 
 ## Reste à faire (prochaines phases)
 - **Phase 5 :** RevenueCat + StoreKit 2, paywall, limites freemium (durée 3 min, 1080p, outro), restauration d'achat, capture 4K en Pro.

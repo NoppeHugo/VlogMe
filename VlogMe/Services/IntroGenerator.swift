@@ -62,7 +62,7 @@ enum IntroGenerator {
         duration: Double? = nil
     ) async throws -> URL {
         let safeStyle = style.isEnabled ? style : .minimal
-        try await card(Spec(
+        return try await card(Spec(
             style: safeStyle,
             title: title.isEmpty ? "merci d'avoir regardé" : title,
             subtitle: subtitle,
