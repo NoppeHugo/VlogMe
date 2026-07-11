@@ -79,7 +79,19 @@ enum IntroGenerator {
         let name = "vlogme-\(role)-\(stableHash(key)).mp4"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: url.path) { return url }
-        try await render(spec, to: url)
+        // Rendu dans un fichier temporaire unique déplacé atomiquement une fois complet :
+        // un rendu interrompu (app tuée, mémoire) ne laisse jamais un cache tronqué qui
+        // ferait échouer l'ouverture ensuite (« Cannot Open »).
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name).\(UUID().uuidString).tmp.mp4")
+        do {
+            try await render(spec, to: tmp)
+        } catch {
+            try? FileManager.default.removeItem(at: tmp)
+            throw error
+        }
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.moveItem(at: tmp, to: url)
         return url
     }
 
