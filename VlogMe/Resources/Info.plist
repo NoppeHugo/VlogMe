@@ -19,7 +19,7 @@
 	     l'Apple Developer Program et l'entitlement iCloud activé (voir README).
 	     À false, la feature est masquée et aucun appel CloudKit n'est fait. -->
 	<key>VLOGME_COLLAB_ENABLED</key>
-	<true/>
+	<false/>
 	<!-- Autorise l'app à recevoir les liens d'invitation iCloud (inoffensif tant
 	     que le flag ci-dessus est à false). -->
 	<key>CKSharingSupported</key>
