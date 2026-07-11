@@ -100,9 +100,11 @@ struct CameraScreen: View {
 
     // MARK: - Top bar
 
-    /// Pendant l'enregistrement, la barre se réduit à l'essentiel — chrono, grille,
-    /// torche — au lieu d'afficher les contrôles verrouillés grisés : sur les petits
-    /// écrans, huit capsules écrasaient les textes (chrono et « 9:16 » illisibles).
+    /// Barre volontairement limitée à quelques pastilles : chacune impose une zone
+    /// tactile de 44 pt, donc au-delà de ~6 boutons ça déborde de l'écran. Les
+    /// réglages secondaires (grille, retardateur, pellicule, démarrage auto) sont
+    /// regroupés dans le menu « … ». Pendant l'enregistrement, on ne garde que le
+    /// chrono et la torche.
     private var topBar: some View {
         HStack(spacing: 8) {
             if !vm.isRecording {
@@ -114,14 +116,10 @@ struct CameraScreen: View {
 
             Spacer(minLength: 8)
 
-            gridButton
-            if !vm.isRecording {
-                quickSettingsMenu
-                countdownMenu
-            }
             torchButton
             if !vm.isRecording {
                 aspectButton
+                moreMenu
             }
         }
         .padding(.horizontal, 16)
@@ -180,21 +178,29 @@ struct CameraScreen: View {
         .accessibilityLabel("Vlog à plusieurs")
     }
 
-    private var gridButton: some View {
-        Button { vm.showGrid.toggle() } label: {
-            Image(systemName: "grid")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(vm.showGrid ? Color.accentOrange : .white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.black.opacity(0.45), in: Capsule())
-                .expandedTapTarget()
-        }
-    }
+    /// Réglages secondaires regroupés dans un seul bouton « … » : grille,
+    /// retardateur, pellicule, démarrage auto — pour éviter que la barre déborde.
+    private var moreMenu: some View {
+        let anyActive = vm.showGrid || vm.countdownEnabled || vm.saveClipsToCameraRoll || vm.autoStartRecording
+        return Menu {
+            Toggle(isOn: Binding(
+                get: { vm.showGrid },
+                set: { vm.showGrid = $0 }
+            )) {
+                Label("Grille de composition", systemImage: "grid")
+            }
 
-    // Réglages rapides : pellicule + démarrage auto
-    private var quickSettingsMenu: some View {
-        Menu {
+            Picker(selection: Binding(
+                get: { vm.countdownSeconds },
+                set: { vm.countdownSeconds = $0 }
+            )) {
+                ForEach(vm.countdownOptions, id: \.self) { s in
+                    Text(s == 0 ? "Désactivé" : "\(s) s").tag(s)
+                }
+            } label: {
+                Label("Retardateur", systemImage: "timer")
+            }
+
             Toggle(isOn: Binding(
                 get: { vm.saveClipsToCameraRoll },
                 set: { vm.setSaveClipsToCameraRoll($0) }
@@ -208,43 +214,15 @@ struct CameraScreen: View {
                 Label("Filmer dès l'ouverture", systemImage: "bolt.fill")
             }
         } label: {
-            Image(systemName: "slider.horizontal.3")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle((vm.saveClipsToCameraRoll || vm.autoStartRecording) ? Color.accentOrange : .white)
+            Image(systemName: "ellipsis")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(anyActive ? Color.accentOrange : .white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(.black.opacity(0.45), in: Capsule())
                 .expandedTapTarget()
         }
-        .accessibilityLabel("Réglages de capture")
-    }
-
-    // Retardateur (réglable : Off / 3s / 5s / 10s)
-    private var countdownMenu: some View {
-        Menu {
-            Picker("Retardateur", selection: Binding(
-                get: { vm.countdownSeconds },
-                set: { vm.countdownSeconds = $0 }
-            )) {
-                ForEach(vm.countdownOptions, id: \.self) { s in
-                    Text(s == 0 ? "Désactivé" : "\(s) s").tag(s)
-                }
-            }
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "timer")
-                    .font(.caption2.weight(.bold))
-                Text(vm.countdownEnabled ? "\(vm.countdownSeconds)s" : "Off")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-            .foregroundStyle(vm.countdownEnabled ? Color.accentOrange : .white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.black.opacity(0.45), in: Capsule())
-            .expandedTapTarget()
-        }
+        .accessibilityLabel("Plus de réglages")
     }
 
     @ViewBuilder

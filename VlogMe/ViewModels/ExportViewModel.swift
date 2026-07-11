@@ -276,6 +276,7 @@ final class ExportViewModel: ObservableObject {
                 outroURL: outroURL,
                 stickerLayer: stickerLayer,
                 cityCardsEnabled: cityCardsEnabled,
+                watermark: !entitlements.isPro,
                 musicURL: musicURL,
                 musicVolume: musicVolume
             )

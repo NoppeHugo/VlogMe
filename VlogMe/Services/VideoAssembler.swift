@@ -47,6 +47,7 @@ struct VideoAssembler {
         outroURL: URL? = nil,
         stickerLayer: CALayer? = nil,
         cityCardsEnabled: Bool = false,
+        watermark: Bool = false,
         musicURL: URL? = nil,
         musicVolume: Float = 0.3
     ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition, audioMix: AVMutableAudioMix?) {
@@ -67,9 +68,10 @@ struct VideoAssembler {
         var cursor = CMTime.zero
         var instructions: [AVMutableVideoCompositionInstruction] = []
 
-        // Intro stylée (carton de marque, plein clip)
+        // Intro stylée (carton de marque, plein clip). Non bloquant : si le fichier
+        // d'intro est illisible, on continue avec les segments plutôt que d'échouer.
         if let introURL {
-            try await insertClip(
+            try? await insertClip(
                 url: introURL,
                 trimStart: .zero,
                 trimEnd: nil,
@@ -87,7 +89,7 @@ struct VideoAssembler {
         if let hook {
             let count = min(hook.maxClips, clips.count)
             for clip in clips.prefix(count) {
-                try await insertClip(
+                try? await insertClip(
                     url: clip.url,
                     trimStart: clip.trimStart,
                     trimEnd: CMTimeAdd(clip.trimStart, CMTime(seconds: hook.clipDuration, preferredTimescale: 600)),
@@ -118,24 +120,33 @@ struct VideoAssembler {
                 )
             }
             cityStarts.append((city: clip.city, start: cursor.seconds))
-            try await insertClip(
-                url: clip.url,
-                trimStart: clip.trimStart,
-                trimEnd: clip.trimEnd,
-                cutSilence: cutSilence,
-                isOutro: false,
-                transition: transition,
-                videoTrack: videoTrack,
-                audioTrack: audioTrack,
-                renderSize: renderSize,
-                cursor: &cursor,
-                instructions: &instructions
-            )
+            // Non bloquant : on ignore un clip illisible plutôt que de faire échouer
+            // tout l'assemblage (« Cannot Open »). On vérifie plus bas qu'il en reste au moins un.
+            do {
+                try await insertClip(
+                    url: clip.url,
+                    trimStart: clip.trimStart,
+                    trimEnd: clip.trimEnd,
+                    cutSilence: cutSilence,
+                    isOutro: false,
+                    transition: transition,
+                    videoTrack: videoTrack,
+                    audioTrack: audioTrack,
+                    renderSize: renderSize,
+                    cursor: &cursor,
+                    instructions: &instructions
+                )
+            } catch {
+                continue
+            }
         }
 
-        // Outro optionnel (plein clip, sans trim ni silence)
+        // Aucun segment n'a pu être inséré (tous illisibles) → échec explicite.
+        guard cursor > .zero else { throw AssemblerError.noSegments }
+
+        // Outro optionnel (plein clip, sans trim ni silence). Non bloquant.
         if let outroURL {
-            try await insertClip(
+            try? await insertClip(
                 url: outroURL,
                 trimStart: .zero,
                 trimEnd: nil,
@@ -164,6 +175,10 @@ struct VideoAssembler {
                renderSize: renderSize
            ) {
             overlayLayers.append(cityLayer)
+        }
+        // Filigrane VlogMe (utilisateurs gratuits) — ajouté en dernier pour rester au-dessus.
+        if watermark, let mark = WatermarkRenderer.makeLayer(renderSize: renderSize) {
+            overlayLayers.append(mark)
         }
         if !overlayLayers.isEmpty {
             let videoLayer = CALayer()
