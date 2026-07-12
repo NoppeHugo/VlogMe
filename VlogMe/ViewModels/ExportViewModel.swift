@@ -336,15 +336,24 @@ final class ExportViewModel: ObservableObject {
     func shareToInstagram() {
         guard let url = exportedURL else { return }
         Analytics.track(.sharedToInstagram)
-        let pasteboardItems: [String: Any] = ["com.instagram.sharedSticker.backgroundVideo": try! Data(contentsOf: url)]
-        UIPasteboard.general.setItems([pasteboardItems], options: [:])
-        if let igURL = URL(string: "instagram-reels://shareToReels") {
-            if UIApplication.shared.canOpenURL(igURL) {
-                UIApplication.shared.open(igURL)
-            } else {
-                showShareSheet = true
-            }
+
+        // Instagram indisponible → on bascule sur la share sheet sans toucher au presse-papiers.
+        guard let igURL = URL(string: "instagram-reels://shareToReels"),
+              UIApplication.shared.canOpenURL(igURL) else {
+            showShareSheet = true
+            return
         }
+        // Lecture de la vidéo en mémoire mappée (évite de charger un 4K entier en RAM)
+        // et sans `try!` : un échec de lecture retombe sur la share sheet au lieu de crasher.
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
+            showShareSheet = true
+            return
+        }
+        UIPasteboard.general.setItems(
+            [["com.instagram.sharedSticker.backgroundVideo": data]],
+            options: [:]
+        )
+        UIApplication.shared.open(igURL)
     }
 
     func shareToTikTok() {
