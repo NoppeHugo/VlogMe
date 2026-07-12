@@ -6,11 +6,13 @@ struct ExportSheet: View {
 
     @StateObject private var vm: ExportViewModel
     @EnvironmentObject private var store: VlogStore
+    @EnvironmentObject private var entitlements: Entitlements
     @Environment(\.dismiss) private var dismiss
 
     @State private var baseThumb: UIImage? = nil
     @State private var showMusicPicker = false
     @State private var showReviewPrompt = false
+    @State private var showPaywall = false
     @AppStorage("hasAskedReview") private var hasAskedReview = false
 
     init(store: VlogStore, entitlements: Entitlements) {
@@ -45,6 +47,29 @@ struct ExportSheet: View {
         }
         .sheet(isPresented: $showReviewPrompt) {
             ReviewPromptView()
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(context: .export)
+                .environmentObject(entitlements)
+        }
+        // Achat effectué depuis le paywall → on lance l'export directement.
+        .onChange(of: entitlements.isPro) { _, isPro in
+            if isPro && showPaywall {
+                showPaywall = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    Task { await vm.export() }
+                }
+            }
+        }
+    }
+
+    /// Lance l'export si l'utilisateur est Pro, sinon affiche le paywall.
+    private func launchExport() {
+        if vm.isPro {
+            Task { await vm.export() }
+        } else {
+            Analytics.track(.paywallShown, ["trigger": "export_launch"])
+            showPaywall = true
         }
     }
 
@@ -174,11 +199,12 @@ struct ExportSheet: View {
 
             VStack(spacing: 10) {
                 Button {
-                    Task { await vm.export() }
+                    launchExport()
                 } label: {
                     HStack {
                         Spacer()
-                        Label("Exporter · \(vm.resolutionLabel)", systemImage: "square.and.arrow.up")
+                        Label(vm.isPro ? "Exporter · \(vm.resolutionLabel)" : "Exporter · Pro",
+                              systemImage: vm.isPro ? "square.and.arrow.up" : "lock.fill")
                             .font(.subheadline.weight(.bold))
                         Spacer()
                     }
