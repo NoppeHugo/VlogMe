@@ -8,7 +8,6 @@ struct PreviewScreen: View {
     @EnvironmentObject private var entitlements: Entitlements
     @Environment(\.dismiss) private var dismiss
     @State private var showExport   = false
-    @State private var showPaywall  = false
 
     init(store: VlogStore) {
         _vm = StateObject(wrappedValue: PreviewViewModel(store: store))
@@ -59,6 +58,12 @@ struct PreviewScreen: View {
                     .ignoresSafeArea(edges: .top)
             }
 
+            // Filigrane VlogMe pour les utilisateurs gratuits (retiré en Pro).
+            if !entitlements.isPro {
+                WatermarkOverlayView()
+                    .ignoresSafeArea(edges: .top)
+            }
+
             VStack {
                 Spacer()
                 bottomBar
@@ -67,18 +72,9 @@ struct PreviewScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .task { await vm.build(isPro: entitlements.isPro) }
-        // Après achat dans le paywall → ouvre l'export automatiquement
-        .onChange(of: entitlements.isPro) { _, isPro in
-            if isPro && showPaywall {
-                showPaywall = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    showExport = true
-                }
-            }
-        }
-        .sheet(isPresented: $showPaywall) {
-            PaywallView(context: .export)
-                .environmentObject(entitlements)
+        // Le filigrane disparaît immédiatement après l'achat.
+        .onChange(of: entitlements.isPro) { _, _ in
+            Task { await vm.build(isPro: entitlements.isPro) }
         }
         .fullScreenCover(isPresented: $showExport) {
             ExportSheet(store: store, entitlements: entitlements)
@@ -112,11 +108,8 @@ struct PreviewScreen: View {
     }
 
     private func handleExportTap() {
-        if entitlements.canExport {
-            showExport = true
-        } else {
-            Analytics.track(.paywallShown, ["trigger": "export"])
-            showPaywall = true
-        }
+        // Tout le monde peut ouvrir la feuille d'export pour voir les options.
+        // Le mur (paywall) intervient au moment de lancer l'export, à l'intérieur.
+        showExport = true
     }
 }
