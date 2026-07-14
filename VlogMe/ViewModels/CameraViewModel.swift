@@ -2,6 +2,8 @@ import Foundation
 import AVFoundation
 import Combine
 import UIKit
+import PhotosUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class CameraViewModel: ObservableObject {
@@ -37,6 +39,13 @@ final class CameraViewModel: ObservableObject {
 
     /// Message transitoire à afficher (ex. accès Photos refusé).
     @Published var clipSaveNotice: String? = nil
+
+    /// Import de clips en cours (depuis la pellicule) : bloque un double lancement
+    /// et permet d'afficher un indicateur.
+    @Published private(set) var isImporting = false
+
+    /// Message transitoire après un import de clips (« 3 clips importés »).
+    @Published var importNotice: String? = nil
 
     private var didAutoStart = false
     private var wantsToStart = false
@@ -287,6 +296,60 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Import de clips (fusionner un vlog à plusieurs sans CloudKit)
+
+    /// Importe des vidéos choisies dans la pellicule et les ajoute comme segments
+    /// du brouillon actif. Sert à mettre en commun les clips de plusieurs personnes :
+    /// chacun filme de son côté (ou enregistre ses clips dans la pellicule), puis on
+    /// rassemble tout dans un seul vlog via AirDrop + import, avant l'export.
+    func importClips(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty, !isImporting else { return }
+        isImporting = true
+        defer { isImporting = false }
+
+        var imported = 0
+        for item in items {
+            guard let movie = try? await item.loadTransferable(type: ImportedMovie.self) else { continue }
+            let dest = store.newSegmentURL()
+            do {
+                try FileManager.default.moveItem(at: movie.url, to: dest)
+            } catch {
+                try? FileManager.default.removeItem(at: movie.url)
+                continue
+            }
+            let asset = AVURLAsset(url: dest)
+            let measured = (try? await asset.load(.duration).seconds) ?? 0
+            guard measured.isFinite, measured > 0 else {
+                try? FileManager.default.removeItem(at: dest)
+                continue
+            }
+            let captured = await Self.creationDate(of: asset)
+            let segment = VideoSegment(
+                fileName: dest.lastPathComponent,
+                durationSeconds: measured,
+                facing: .back,          // clip importé : pas de miroir façon caméra frontale
+                capturedAt: captured,
+                city: nil
+            )
+            store.append(segment)
+            imported += 1
+        }
+
+        if imported > 0 {
+            impactLight.impactOccurred()
+            importNotice = "\(imported) clip\(imported == 1 ? "" : "s") importé\(imported == 1 ? "" : "s"). Réorganise-les dans l'ordre voulu avant l'export."
+        } else {
+            importNotice = "Aucun clip n'a pu être importé."
+        }
+    }
+
+    /// Date de création lue dans les métadonnées de la vidéo (pour l'ordre
+    /// chronologique). `nil` si le clip ne la porte pas.
+    private static func creationDate(of asset: AVURLAsset) async -> Date? {
+        guard let item = try? await asset.load(.creationDate) else { return nil }
+        return try? await item.load(.dateValue)
+    }
+
     /// Active/désactive le démarrage automatique de l'enregistrement à l'ouverture.
     func setAutoStartRecording(_ on: Bool) {
         autoStartRecording = on
@@ -373,4 +436,24 @@ final class CameraViewModel: ObservableObject {
 
 extension Notification.Name {
     static let vlogmeStartRecording = Notification.Name("pro.vlogme.startRecording")
+}
+
+// MARK: - Clip importé depuis la pellicule
+
+/// Reçoit le fichier vidéo choisi dans le `PhotosPicker` sous forme de copie dans
+/// un dossier temporaire ; `importClips` le déplace ensuite dans le brouillon.
+struct ImportedMovie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let temp = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString + ".mov")
+            try? FileManager.default.removeItem(at: temp)
+            try FileManager.default.copyItem(at: received.file, to: temp)
+            return ImportedMovie(url: temp)
+        }
+    }
 }

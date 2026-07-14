@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct CameraScreen: View {
 
@@ -7,6 +8,8 @@ struct CameraScreen: View {
     @State private var showLibrary      = false
     @State private var showReorder      = false
     @State private var showCollab       = false
+    @State private var showImporter     = false
+    @State private var pickedClips: [PhotosPickerItem] = []
     @State private var segmentToTrim: VideoSegment? = nil
 
     init(camera: CameraService, store: VlogStore, showPreview: Binding<Bool>) {
@@ -61,6 +64,12 @@ struct CameraScreen: View {
                 CountdownOverlayView(value: n)
                     .transition(.opacity)
             }
+
+            // Overlay import de clips en cours
+            if vm.isImporting {
+                importingOverlay
+                    .transition(.opacity)
+            }
         }
         .statusBarHidden(true)
         .animation(.easeInOut(duration: 0.2), value: vm.showGrid)
@@ -95,6 +104,48 @@ struct CameraScreen: View {
             Button("OK", role: .cancel) { vm.clipSaveNotice = nil }
         } message: { notice in
             Text(notice)
+        }
+        .photosPicker(
+            isPresented: $showImporter,
+            selection: $pickedClips,
+            matching: .videos
+        )
+        .onChange(of: pickedClips) { _, items in
+            guard !items.isEmpty else { return }
+            Task {
+                await vm.importClips(items)
+                pickedClips = []
+            }
+        }
+        .alert(
+            "Import",
+            isPresented: Binding(
+                get: { vm.importNotice != nil },
+                set: { if !$0 { vm.importNotice = nil } }
+            ),
+            presenting: vm.importNotice
+        ) { _ in
+            Button("OK", role: .cancel) { vm.importNotice = nil }
+        } message: { notice in
+            Text(notice)
+        }
+    }
+
+    // MARK: - Overlay import
+
+    private var importingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(1.3)
+                Text("Import des clips…")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
+            .padding(28)
+            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 20))
         }
     }
 
@@ -212,6 +263,16 @@ struct CameraScreen: View {
                 set: { vm.setAutoStartRecording($0) }
             )) {
                 Label("Filmer dès l'ouverture", systemImage: "bolt.fill")
+            }
+
+            Divider()
+
+            // Rassembler les clips de plusieurs personnes dans un seul vlog
+            // (chacun filme de son côté, on importe tout ici avant l'export).
+            Button {
+                showImporter = true
+            } label: {
+                Label("Importer des clips", systemImage: "square.and.arrow.down.on.square")
             }
         } label: {
             Image(systemName: "ellipsis")

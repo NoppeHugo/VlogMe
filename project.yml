@@ -30,9 +30,11 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"           # iPhone uniquement
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         # DEVELOPMENT_TEAM: XXXXXXXXXX        # ← renseigne ton Team ID, ou laisse Xcode gérer la signature auto
-        # Vlog à plusieurs (CloudKit) — activé (compte Apple Developer requis).
-        # Pour le désactiver : recommenter cette ligne + VLOGME_COLLAB_ENABLED=false dans Info.plist.
-        CODE_SIGN_ENTITLEMENTS: VlogMe/Resources/VlogMe.entitlements
+        # Vlog à plusieurs (CloudKit) — DÉSACTIVÉ pour builder sur un compte Apple
+        # gratuit (« Personal Team »), qui ne supporte ni iCloud ni Push Notifications.
+        # Pour le réactiver une fois inscrit à l'Apple Developer Program : décommente
+        # la ligne ci-dessous + repasse VLOGME_COLLAB_ENABLED à true dans Info.plist.
+        # CODE_SIGN_ENTITLEMENTS: VlogMe/Resources/VlogMe.entitlements
     dependencies:
       - package: PostHog
   VlogMeWidgetExtension:
